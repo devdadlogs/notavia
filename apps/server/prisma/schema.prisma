@@ -1,0 +1,107 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String     @id @default(uuid())
+  email          String     @unique
+  password       String?    // Hashed password for email/password login
+  name           String?
+  avatarUrl      String?
+  plan           PlanType   @default(FREE)
+  aiUsageCount   Int        @default(0)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  notebooks      Notebook[]
+  notes          Note[]
+  tags           Tag[]
+  aiUsageLogs    AiUsageLog[]
+}
+
+enum PlanType {
+  FREE
+  PRO
+  TEAM
+}
+
+model Notebook {
+  id             String     @id @default(uuid())
+  userId         String
+  name           String
+  parentId       String?    // For nested notebooks
+  icon           String?
+  color          String?
+  isAiDisabled   Boolean    @default(false)
+  order          Int        @default(0)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent         Notebook?  @relation("NotebookHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children       Notebook[] @relation("NotebookHierarchy")
+  notes          Note[]
+}
+
+model Note {
+  id             String     @id @default(uuid())
+  userId         String
+  notebookId     String?
+  title          String     @default("Untitled")
+  contentJson    Json?      // Tiptap JSON content
+  contentText    String?    // Plain text for searching
+  coverImage     String?    // URL to cover image
+  icon           String?    // Emoji or URL to icon
+  wordCount      Int        @default(0)
+  isPinned       Boolean    @default(false)
+  isTrashed      Boolean    @default(false)
+  version        Int        @default(1)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notebook       Notebook?  @relation(fields: [notebookId], references: [id], onDelete: SetNull)
+  tags           NoteTag[]
+}
+
+model Tag {
+  id             String     @id @default(uuid())
+  userId         String
+  name           String
+  color          String?
+  createdAt      DateTime   @default(now())
+
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notes          NoteTag[]
+  
+  @@unique([userId, name])
+}
+
+model NoteTag {
+  noteId         String
+  tagId          String
+  assignedAt     DateTime   @default(now())
+
+  note           Note       @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  tag            Tag        @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([noteId, tagId])
+}
+
+model AiUsageLog {
+  id             String     @id @default(uuid())
+  userId         String
+  actionType     String     // e.g., 'summarize', 'continue', 'rewrite'
+  tokensUsed     Int?
+  createdAt      DateTime   @default(now())
+
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

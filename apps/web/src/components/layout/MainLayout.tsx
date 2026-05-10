@@ -1,12 +1,21 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from '../sidebar/Sidebar';
+import { useUIStore } from '../../stores/uiStore';
 
 export default function MainLayout() {
+  const { isSidebarOpen } = useUIStore();
+
   return (
     <div style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: 'var(--bg-color)', overflow: 'hidden' }}>
       {/* Left Sidebar */}
-      <div style={{ width: '280px', flexShrink: 0, height: '100%' }}>
+      <div style={{ 
+        width: isSidebarOpen ? '280px' : '0px', 
+        flexShrink: 0, 
+        height: '100%',
+        transition: 'width var(--transition-normal)',
+        overflow: 'hidden'
+      }}>
         <Sidebar />
       </div>
 

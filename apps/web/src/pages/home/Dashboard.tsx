@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
-import { Search, Gift, Play, MoreHorizontal, Mic, Edit3, Plus } from 'lucide-react';
+import { Search, Gift, Play, MoreHorizontal, Mic, Edit3, Plus, Menu } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
+import { useUIStore } from '../../stores/uiStore';
 
 export default function Dashboard() {
   const [notes, setNotes] = useState<any[]>([]);
   const navigate = useNavigate();
   const user = useAuthStore(state => state.user);
+  const toggleSidebar = useUIStore(state => state.toggleSidebar);
 
   useEffect(() => {
     const fetchNotes = async () => {
@@ -35,8 +37,8 @@ export default function Dashboard() {
       
       {/* Top Header */}
       <header style={{ display: 'flex', alignItems: 'center', padding: '16px 32px', gap: '24px' }}>
-        <button style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        <button onClick={toggleSidebar} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-primary)' }}>
+          <Menu size={24} />
         </button>
         <div className="search-input-wrapper">
           <Search size={18} color="var(--text-tertiary)" />

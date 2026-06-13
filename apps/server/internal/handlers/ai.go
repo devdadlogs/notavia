@@ -36,23 +36,38 @@ func streamResponse(c *gin.Context, outChan <-chan string, errChan <-chan error)
 	})
 }
 
-var llmProvider services.LLMProvider
 var qdrantService *services.QdrantService
 
-func getLLMProvider() services.LLMProvider {
-	if llmProvider == nil {
-		if config.AppConfig.LLMProvider == "openai" {
-			llmProvider = services.NewOpenAIProvider(
-				config.AppConfig.OpenAIBaseURL,
-				config.AppConfig.OpenAIKey,
-				config.AppConfig.OpenAIModel,
-			)
-		} else {
-			// Defaulting to Ollama for local setup.
-			llmProvider = services.NewOllamaService()
-		}
+func getLLMProvider(userID string) services.LLMProvider {
+	var user models.User
+	if userID != "" {
+		config.DB.Where("id = ?", userID).First(&user)
 	}
-	return llmProvider
+
+	// Use user settings if they chose a provider
+	providerType := user.LLMProvider
+	if providerType == "" {
+		providerType = config.AppConfig.LLMProvider // Fallback to global
+	}
+
+	if providerType == "openai" {
+		baseURL := user.OpenAIBaseURL
+		if baseURL == "" {
+			baseURL = config.AppConfig.OpenAIBaseURL
+		}
+		apiKey := user.OpenAIKey
+		if apiKey == "" {
+			apiKey = config.AppConfig.OpenAIKey
+		}
+		model := user.OpenAIModel
+		if model == "" {
+			model = config.AppConfig.OpenAIModel
+		}
+		return services.NewOpenAIProvider(baseURL, apiKey, model)
+	}
+
+	// Default to Ollama
+	return services.NewOllamaService()
 }
 
 func getQdrantService() *services.QdrantService {
@@ -97,7 +112,8 @@ type SproutInput struct {
 
 // AIHealthCheck returns the status of the AI provider and available models.
 func AIHealthCheck(c *gin.Context) {
-	healthy, err := getLLMProvider().CheckHealth()
+	userID := middleware.GetUserID(c)
+	healthy, err := getLLMProvider(userID).CheckHealth()
 	if err != nil || !healthy {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"status": "offline",
@@ -106,7 +122,7 @@ func AIHealthCheck(c *gin.Context) {
 		return
 	}
 
-	models, _ := getLLMProvider().ListModels()
+	models, _ := getLLMProvider(userID).ListModels()
 
 	c.JSON(http.StatusOK, gin.H{
 		"status": "online",
@@ -140,7 +156,7 @@ func AISummarize(c *gin.Context) {
 
 	logAIUsage(userID, "summarize")
 
-	go services.SummarizeStream(getLLMProvider(), note.ContentText, input.Mode, outChan, errChan)
+	go services.SummarizeStream(getLLMProvider(userID), note.ContentText, input.Mode, outChan, errChan)
 	streamResponse(c, outChan, errChan)
 }
 
@@ -169,7 +185,7 @@ func AIExtract(c *gin.Context) {
 
 	logAIUsage(userID, "extract")
 
-	go services.ExtractKeyPointsStream(getLLMProvider(), note.ContentText, outChan, errChan)
+	go services.ExtractKeyPointsStream(getLLMProvider(userID), note.ContentText, outChan, errChan)
 	streamResponse(c, outChan, errChan)
 }
 
@@ -187,7 +203,7 @@ func AIContinue(c *gin.Context) {
 
 	logAIUsage(userID, "continue")
 
-	go services.ContinueWritingStream(getLLMProvider(), input.Content, outChan, errChan)
+	go services.ContinueWritingStream(getLLMProvider(userID), input.Content, outChan, errChan)
 	streamResponse(c, outChan, errChan)
 }
 
@@ -205,7 +221,7 @@ func AIRewrite(c *gin.Context) {
 
 	logAIUsage(userID, "rewrite")
 
-	go services.RewriteStream(getLLMProvider(), input.Content, input.Style, outChan, errChan)
+	go services.RewriteStream(getLLMProvider(userID), input.Content, input.Style, outChan, errChan)
 	streamResponse(c, outChan, errChan)
 }
 
@@ -234,7 +250,7 @@ func AISuggestTags(c *gin.Context) {
 
 	logAIUsage(userID, "suggest_tags")
 
-	go services.SuggestTagsStream(getLLMProvider(), note.ContentText, outChan, errChan)
+	go services.SuggestTagsStream(getLLMProvider(userID), note.ContentText, outChan, errChan)
 	streamResponse(c, outChan, errChan)
 }
 
@@ -248,7 +264,7 @@ func AISprout(c *gin.Context) {
 	}
 
 	// 1. Generate embedding for the input content
-	embedding, err := getLLMProvider().Embed(input.Content)
+	embedding, err := getLLMProvider(userID).Embed(input.Content)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate embedding: " + err.Error()})
 		return

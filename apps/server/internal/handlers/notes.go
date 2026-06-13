@@ -64,7 +64,7 @@ func CreateNote(c *gin.Context) {
 	}
 
 	// Index in vector DB for semantic search
-	go indexNoteInVectorDB(note.ID, note.Title, note.ContentText)
+	go indexNoteInVectorDB(userID, note.ID, note.Title, note.ContentText)
 
 	c.JSON(http.StatusCreated, note)
 }
@@ -153,7 +153,7 @@ func UpdateNote(c *gin.Context) {
 	config.DB.First(&note, "id = ?", noteID)
 
 	// Update vector DB
-	go indexNoteInVectorDB(note.ID, note.Title, note.ContentText)
+	go indexNoteInVectorDB(userID, note.ID, note.Title, note.ContentText)
 
 	c.JSON(http.StatusOK, note)
 }
@@ -292,7 +292,7 @@ func WebClipper(c *gin.Context) {
 
 	// 3. Summarize using AI
 	prompt := fmt.Sprintf("请作为一位专业的知识管理助手，阅读以下网页内容，并提取核心摘要和要点。请用 Markdown 格式输出：\n\n%s", textContent)
-	aiResponse, err := getLLMProvider().Generate(prompt)
+	aiResponse, err := getLLMProvider(userID).Generate(prompt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "AI generation failed"})
 		return
@@ -316,7 +316,7 @@ func WebClipper(c *gin.Context) {
 	}
 
 	// Index in vector DB for semantic search
-	go indexNoteInVectorDB(note.ID, note.Title, note.ContentText)
+	go indexNoteInVectorDB(userID, note.ID, note.Title, note.ContentText)
 
 	c.JSON(http.StatusCreated, note)
 }
@@ -351,11 +351,11 @@ func GetStats(c *gin.Context) {
 
 // --- Helper ---
 
-func indexNoteInVectorDB(noteID, title, contentText string) {
+func indexNoteInVectorDB(userID, noteID, title, contentText string) {
 	if contentText == "" {
 		return // Skip empty notes
 	}
-	embedding, err := getLLMProvider().Embed(contentText)
+	embedding, err := getLLMProvider(userID).Embed(contentText)
 	if err != nil {
 		fmt.Printf("Failed to embed note %s: %v\n", noteID, err)
 		return

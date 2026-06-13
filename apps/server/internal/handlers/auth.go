@@ -112,6 +112,34 @@ func GetMe(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"user": sanitizeUser(user)})
 }
 
+type UpdateLLMConfigInput struct {
+	LLMProvider   string `json:"llmProvider"`
+	OpenAIBaseURL string `json:"openAiBaseUrl"`
+	OpenAIKey     string `json:"openAiKey"`
+	OpenAIModel   string `json:"openAiModel"`
+}
+
+func UpdateLLMConfig(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	var input UpdateLLMConfigInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := config.DB.Model(&models.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+		"llm_provider":     input.LLMProvider,
+		"open_ai_base_url": input.OpenAIBaseURL,
+		"open_ai_key":      input.OpenAIKey,
+		"open_ai_model":    input.OpenAIModel,
+	}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update LLM config"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "LLM config updated successfully"})
+}
+
 // --- Helpers ---
 
 func generateToken(user models.User) string {
@@ -134,11 +162,15 @@ func setTokenCookie(c *gin.Context, token string) {
 
 func sanitizeUser(user models.User) gin.H {
 	return gin.H{
-		"id":        user.ID,
-		"email":     user.Email,
-		"name":      user.Name,
-		"avatarUrl": user.AvatarURL,
-		"plan":      user.Plan,
-		"createdAt": user.CreatedAt,
+		"id":            user.ID,
+		"email":         user.Email,
+		"name":          user.Name,
+		"avatarUrl":     user.AvatarURL,
+		"plan":          user.Plan,
+		"createdAt":     user.CreatedAt,
+		"llmProvider":   user.LLMProvider,
+		"openAiBaseUrl": user.OpenAIBaseURL,
+		"openAiKey":     user.OpenAIKey,
+		"openAiModel":   user.OpenAIModel,
 	}
 }

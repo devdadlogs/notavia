@@ -6,6 +6,10 @@ interface User {
   email: string;
   name?: string;
   avatarUrl?: string;
+  llmProvider?: string;
+  openAiBaseUrl?: string;
+  openAiKey?: string;
+  openAiModel?: string;
 }
 
 interface AuthState {
@@ -14,6 +18,7 @@ interface AuthState {
   isLoading: boolean;
   checkAuth: () => Promise<void>;
   logout: () => Promise<void>;
+  updateUser: (data: Partial<User>) => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -37,5 +42,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     } finally {
       set({ user: null, isAuthenticated: false });
     }
-  }
+  },
+
+  updateUser: (data) => set((state) => ({
+    user: state.user ? { ...state.user, ...data } : null
+  }))
 }));

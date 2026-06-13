@@ -23,6 +23,12 @@ type User struct {
 	CreatedAt    time.Time `json:"createdAt" gorm:"autoCreateTime"`
 	UpdatedAt    time.Time `json:"updatedAt" gorm:"autoUpdateTime"`
 
+	// LLM Configuration
+	LLMProvider   string `json:"llmProvider" gorm:"default:'ollama'"`
+	OpenAIBaseURL string `json:"openAiBaseUrl"`
+	OpenAIKey     string `json:"openAiKey"`
+	OpenAIModel   string `json:"openAiModel"`
+
 	Notebooks   []Notebook   `json:"notebooks,omitempty" gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
 	Notes       []Note       `json:"notes,omitempty" gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
 	Tags        []Tag        `json:"tags,omitempty" gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`

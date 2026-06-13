@@ -3,8 +3,9 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import api from '../../services/api';
 import { 
-  Calendar, FileText, BarChart2, Folder, BookOpen, Mic, Trash2, ChevronRight, Gift
+  Calendar, FileText, BarChart2, Folder, BookOpen, Mic, Trash2, ChevronRight, Gift, Settings
 } from 'lucide-react';
+import SettingsModal from '../ui/SettingsModal';
 
 export default function Sidebar() {
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ export default function Sidebar() {
   const user = useAuthStore(state => state.user);
   const logout = useAuthStore(state => state.logout);
   const [stats, setStats] = useState({ total: 0, daily: [] as {date: string, count: number}[] });
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -51,14 +53,18 @@ export default function Sidebar() {
     }}>
       
       {/* User Profile */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', cursor: 'pointer' }}>
+      <div 
+        onClick={() => setIsSettingsOpen(true)}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', cursor: 'pointer', padding: '8px', borderRadius: '8px', margin: '-8px -8px 24px -8px' }}
+        className="hover-bg-input"
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ fontSize: '14px', fontWeight: 600 }}>{user?.name?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase()}</span>
           </div>
           <span style={{ fontSize: '15px', fontWeight: 600 }}>{user?.name || 'Get达人'}</span>
         </div>
-        <ChevronRight size={18} color="var(--text-tertiary)" />
+        <Settings size={18} color="var(--text-tertiary)" />
       </div>
 
       {/* VIP Banner */}
@@ -149,6 +155,10 @@ export default function Sidebar() {
         </button>
       </div>
 
+      <SettingsModal 
+        isOpen={isSettingsOpen} 
+        onClose={() => setIsSettingsOpen(false)} 
+      />
     </div>
   );
 }

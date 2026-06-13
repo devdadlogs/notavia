@@ -47,14 +47,17 @@ export const aiService = {
       buffer = parts.pop() || '';
 
       for (const part of parts) {
-        if (part.includes('event: error')) {
-          const dataLine = part.split('\n').find(l => l.startsWith('data: '));
-          throw new Error(dataLine ? dataLine.slice(6) : 'AI Streaming Error');
+        if (part.includes('event:error') || part.includes('event: error')) {
+          const dataLine = part.split('\n').find(l => l.startsWith('data:') || l.startsWith('data: '));
+          const errText = dataLine ? dataLine.replace(/^data:\s*/, '') : 'AI Streaming Error';
+          throw new Error(errText);
         }
-        if (part.includes('event: message')) {
-          const dataLines = part.split('\n').filter(l => l.startsWith('data: '));
+        
+        // Accept both "event: message", "event:message", or default empty event (just data)
+        if (part.includes('data:') || part.includes('data: ')) {
+          const dataLines = part.split('\n').filter(l => l.startsWith('data:') || l.startsWith('data: '));
           if (dataLines.length > 0) {
-            const chunk = dataLines.map(l => l.slice(6)).join('\n');
+            const chunk = dataLines.map(l => l.replace(/^data:\s*/, '')).join('\n');
             fullText += chunk;
             onChunk(fullText);
           }

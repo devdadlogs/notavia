@@ -8,8 +8,9 @@ import { aiService } from '../../services/ai';
 interface AIPanelProps {
   noteId: string;
   editorText: string; // Current plain text from the Tiptap editor
-  onInsertText?: (text: string) => void; // Callback to insert AI text into editor
+  onInsertText?: (text: string, mode: 'cursor' | 'bottom' | 'top') => void; // Callback to insert AI text into editor
   onClose: () => void;
+  isOpen: boolean;
 }
 
 type AIAction = 'summarize-brief' | 'summarize-detailed' | 'extract' | 'continue' | 'rewrite-formal' | 'rewrite-casual' | 'rewrite-concise' | 'suggest-tags';
@@ -25,7 +26,7 @@ const AI_ACTIONS: { key: AIAction; icon: React.ReactNode; label: string; group: 
   { key: 'suggest-tags', icon: <Tag size={16} />, label: '推荐标签', group: '标签' },
 ];
 
-export default function AIPanel({ noteId, editorText, onInsertText, onClose }: AIPanelProps) {
+export default function AIPanel({ noteId, editorText, onInsertText, onClose, isOpen }: AIPanelProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<string | null>(null);
@@ -87,9 +88,21 @@ export default function AIPanel({ noteId, editorText, onInsertText, onClose }: A
     }
   };
 
-  const handleInsert = () => {
+  const handleInsertCursor = () => {
     if (result && onInsertText) {
-      onInsertText(result);
+      onInsertText(result, 'cursor');
+    }
+  };
+
+  const handleInsertBottom = () => {
+    if (result && onInsertText) {
+      onInsertText(result, 'bottom');
+    }
+  };
+
+  const handleInsertTop = () => {
+    if (result && onInsertText) {
+      onInsertText(result, 'top');
     }
   };
 
@@ -98,8 +111,10 @@ export default function AIPanel({ noteId, editorText, onInsertText, onClose }: A
       position: 'fixed', top: 0, right: 0, width: '400px', height: '100vh',
       backgroundColor: 'var(--bg-panel)', borderLeft: '1px solid var(--border-color)',
       display: 'flex', flexDirection: 'column', zIndex: 200,
-      boxShadow: '-8px 0 32px rgba(0,0,0,0.08)',
-      animation: 'slideInRight 0.25s ease'
+      transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
+      transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+      visibility: isOpen ? 'visible' : 'hidden',
+      boxShadow: isOpen ? '-8px 0 32px rgba(0,0,0,0.08)' : 'none'
     }}>
       {/* Header */}
       <div style={{
@@ -180,16 +195,28 @@ export default function AIPanel({ noteId, editorText, onInsertText, onClose }: A
             </div>
 
             {/* Action Buttons */}
-            <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '16px', flexWrap: 'wrap' }}>
               <button onClick={handleCopy} className="btn btn-outline" style={{ fontSize: '12px', padding: '6px 12px' }}>
                 {copied ? <Check size={14} /> : <Copy size={14} />}
                 {copied ? '已复制' : '复制'}
               </button>
               {onInsertText && (
-                <button onClick={handleInsert} className="btn btn-primary" style={{ fontSize: '12px', padding: '6px 12px', backgroundColor: 'var(--accent-color)', borderRadius: 'var(--radius-pill)' }}>
-                  <PenLine size={14} />
-                  插入到笔记
-                </button>
+                <>
+                  <button onClick={handleInsertCursor} className="btn btn-outline" style={{ fontSize: '12px', padding: '6px 12px', color: 'var(--text-secondary)' }}>
+                    <PenLine size={14} />
+                    插到光标处
+                  </button>
+                  <button onClick={handleInsertBottom} className="btn btn-primary" style={{ fontSize: '12px', padding: '6px 12px', backgroundColor: 'var(--accent-color)', borderRadius: 'var(--radius-pill)' }}>
+                    <ListChecks size={14} />
+                    追加到末尾
+                  </button>
+                  {activeAction === 'suggest-tags' && (
+                    <button onClick={handleInsertTop} className="btn btn-primary" style={{ fontSize: '12px', padding: '6px 12px', backgroundColor: '#8b5cf6', borderRadius: 'var(--radius-pill)', borderColor: '#8b5cf6' }}>
+                      <Sparkles size={14} />
+                      置于文档顶部
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>

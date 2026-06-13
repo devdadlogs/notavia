@@ -256,9 +256,15 @@ export default function NoteDetail() {
   };
 
   // Insert AI-generated text into the editor
-  const handleInsertAIText = (text: string) => {
+  const handleInsertAIText = (text: string, mode: 'cursor' | 'bottom' | 'top') => {
     if (editor) {
-      editor.chain().focus().insertContent('\n\n' + text).run();
+      if (mode === 'bottom') {
+        editor.chain().focus().insertContentAt(editor.state.doc.content.size, '\n\n' + text).run();
+      } else if (mode === 'top') {
+        editor.chain().focus().insertContentAt(0, `> 🏷️ 标签：${text}\n\n`).run();
+      } else {
+        editor.chain().focus().insertContent(text).run();
+      }
       setShowAIPanel(false);
     }
   };
@@ -504,17 +510,14 @@ export default function NoteDetail() {
       </div>
 
       {/* AI Panel Overlay + Drawer */}
-      {showAIPanel && (
-        <>
-          <div className="ai-overlay" onClick={() => setShowAIPanel(false)} />
-          <AIPanel
-            noteId={id!}
-            editorText={editor.getText()}
-            onInsertText={handleInsertAIText}
-            onClose={() => setShowAIPanel(false)}
-          />
-        </>
-      )}
+      <div className="ai-overlay" style={{ display: showAIPanel ? 'block' : 'none' }} onClick={() => setShowAIPanel(false)} />
+      <AIPanel
+        noteId={id!}
+        editorText={editor?.getText() || ''}
+        onInsertText={handleInsertAIText}
+        onClose={() => setShowAIPanel(false)}
+        isOpen={showAIPanel}
+      />
 
     </div>
   );

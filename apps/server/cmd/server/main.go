@@ -74,10 +74,13 @@ func main() {
 		notes := protected.Group("/notes")
 		{
 			notes.POST("", handlers.CreateNote)
+			notes.POST("/clipper", handlers.WebClipper)
 			notes.GET("", handlers.GetNotes)
+			notes.GET("/stats", handlers.GetStats)
 			notes.GET("/:id", handlers.GetNote)
 			notes.PUT("/:id", handlers.UpdateNote)
 			notes.DELETE("/:id", handlers.TrashNote)
+			notes.POST("/:id/audio", handlers.UploadAudio)
 		}
 
 		// Notebooks
@@ -107,6 +110,9 @@ func main() {
 			ai.POST("/sprout", handlers.AISprout)
 		}
 	}
+
+	// Serve static files from uploads
+	r.Static("/static", "./uploads/audio")
 
 	// Start server
 	addr := fmt.Sprintf(":%s", config.AppConfig.Port)

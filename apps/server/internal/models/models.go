@@ -56,6 +56,7 @@ type Note struct {
 	ContentText string    `json:"contentText" gorm:"type:text"`  // Plain text for full-text searching
 	CoverImage  string    `json:"coverImage"`
 	Icon        string    `json:"icon"`
+	AudioURL    string    `json:"audioUrl"`
 	WordCount   int       `json:"wordCount" gorm:"default:0"`
 	IsPinned    bool      `json:"isPinned" gorm:"default:false"`
 	IsTrashed   bool      `json:"isTrashed" gorm:"default:false"`

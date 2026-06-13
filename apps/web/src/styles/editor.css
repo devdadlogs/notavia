@@ -198,3 +198,114 @@ ul[data-type="taskList"] li > div {
   background-color: var(--text-primary);
   border-radius: 2px;
 }
+
+/* ===== Formatting Extensions ===== */
+
+/* Text Alignment */
+.ProseMirror [style*="text-align: center"] { text-align: center; }
+.ProseMirror [style*="text-align: right"] { text-align: right; }
+.ProseMirror [style*="text-align: justify"] { text-align: justify; }
+
+/* Underline */
+.ProseMirror u { text-decoration: underline; }
+
+/* Strikethrough */
+.ProseMirror s { text-decoration: line-through; }
+
+/* Text color (via TextStyle extension) */
+.ProseMirror span[style*="color"] { /* handled inline by Tiptap */ }
+
+/* Highlight */
+.ProseMirror mark {
+  background-color: #fef08a;
+  color: inherit;
+  border-radius: 2px;
+  padding: 0.1em 0.15em;
+}
+
+/* Horizontal Rule / Divider */
+.ProseMirror hr {
+  border: none;
+  border-top: 2px solid var(--border-color);
+  margin: 2rem 0;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.ProseMirror hr.ProseMirror-selectednode {
+  border-top-color: var(--primary-color);
+}
+
+/* Links */
+.ProseMirror a {
+  color: var(--primary-color);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.ProseMirror a:hover {
+  opacity: 0.8;
+}
+
+/* Editor toolbar container */
+.editor-toolbar-wrapper {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* ===== Table Styles (for Excel/CSV import) ===== */
+.ProseMirror table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1.5rem 0;
+  font-size: 14px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.ProseMirror th,
+.ProseMirror td {
+  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;
+  min-width: 60px;
+  position: relative;
+}
+
+.ProseMirror th {
+  background-color: var(--bg-panel-hover);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ProseMirror td {
+  color: var(--text-secondary);
+}
+
+.ProseMirror tr:nth-child(even) td {
+  background-color: var(--bg-color);
+}
+
+.ProseMirror .selectedCell::after {
+  z-index: 2;
+  position: absolute;
+  content: '';
+  left: 0; right: 0; top: 0; bottom: 0;
+  background: rgba(var(--primary-rgb, 16,185,129), 0.12);
+  pointer-events: none;
+}
+
+/* Resize handle for tables */
+.ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px; top: 0; bottom: 0;
+  width: 4px;
+  background-color: var(--primary-color);
+  pointer-events: none;
+  z-index: 20;
+}
+
+

@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
+import api from '../../services/api';
 import { 
   Calendar, FileText, BarChart2, Folder, BookOpen, Mic, Trash2, ChevronRight, Gift
 } from 'lucide-react';
@@ -10,9 +11,27 @@ export default function Sidebar() {
   const location = useLocation();
   const user = useAuthStore(state => state.user);
   const logout = useAuthStore(state => state.logout);
+  const [stats, setStats] = useState({ total: 0, daily: [] as {date: string, count: number}[] });
 
-  // Mock data for the heatmap
-  const heatmapData = Array.from({ length: 42 }).map((_, i) => Math.random() > 0.7);
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const { data } = await api.get('/notes/stats');
+        setStats(data);
+      } catch (err) {
+        console.error('Failed to fetch stats', err);
+      }
+    };
+    fetchStats();
+  }, [location.pathname]); // Refresh when navigating
+
+  // Generate heatmap data (last 42 cells)
+  const heatmapData = Array.from({ length: 42 }).map((_, i) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (41 - i));
+    const dateStr = date.toISOString().split('T')[0];
+    return stats.daily.some(d => d.date === dateStr);
+  });
 
   const menuItems = [
     { icon: <Calendar size={18} />, label: '日历', path: '/calendar' },
@@ -71,7 +90,7 @@ export default function Sidebar() {
       <div style={{ marginBottom: '32px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', textAlign: 'center', marginBottom: '16px' }}>
           <div>
-            <div style={{ fontSize: '20px', fontWeight: 700 }}>4</div>
+            <div style={{ fontSize: '20px', fontWeight: 700 }}>{stats.total}</div>
             <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>全部笔记</div>
           </div>
           <div>
@@ -104,7 +123,11 @@ export default function Sidebar() {
           <div 
             key={idx}
             onClick={() => {
-              if (item.path === '/kb') navigate('/'); // For now map KB to home
+              if (item.path === '/kb') {
+                navigate('/');
+              } else {
+                navigate(item.path);
+              }
             }}
             style={{
               display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', 

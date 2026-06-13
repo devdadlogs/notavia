@@ -1,9 +1,13 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"strings"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
@@ -170,6 +174,181 @@ func TrashNote(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Note trashed"})
 }
 
+func UploadAudio(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	noteID := c.Param("id")
+
+	// Verify note ownership
+	var note models.Note
+	if err := config.DB.Where("id = ? AND user_id = ?", noteID, userID).First(&note).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Note not found"})
+		return
+	}
+
+	file, err := c.FormFile("audio")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No audio file uploaded"})
+		return
+	}
+
+	// Create uploads directory if not exists
+	uploadDir := "uploads/audio"
+	os.MkdirAll(uploadDir, 0755)
+
+	filePath := fmt.Sprintf("%s/%s-%s", uploadDir, noteID, file.Filename)
+	if err := c.SaveUploadedFile(file, filePath); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save audio file"})
+		return
+	}
+
+	// Update note with audio URL
+	audioURL := fmt.Sprintf("/static/%s-%s", noteID, file.Filename)
+	if err := config.DB.Model(&note).Update("audio_url", audioURL).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update note record"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":  "Audio uploaded successfully",
+		"audioUrl": audioURL,
+	})
+}
+
+type WebClipperInput struct {
+	URL string `json:"url"`
+}
+
+func WebClipper(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	var input WebClipperInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 1. Fetch URL content with User-Agent
+	req, err := http.NewRequest("GET", input.URL, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
+		return
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	fmt.Printf("🌐 Clipping URL: %s\n", input.URL)
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fmt.Printf("❌ Clipper fetch error: %v\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch URL"})
+		return
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != 200 {
+		fmt.Printf("❌ Clipper status error: %d %s\n", res.StatusCode, res.Status)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Status code error: %d", res.StatusCode)})
+		return
+	}
+
+	// 2. Parse HTML and extract text
+	doc, err := goquery.NewDocumentFromReader(res.Body)
+	if err != nil {
+		fmt.Printf("❌ Clipper parse error: %v\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse HTML"})
+		return
+	}
+
+	title := doc.Find("title").Text()
+	if title == "" {
+		title = "Clipped Article"
+	}
+	title = strings.TrimSpace(title)
+
+	// Targeted extraction for better results (especially for docs)
+	var contentSource *goquery.Selection
+	if s := doc.Find(".sl-markdown-content"); s.Length() > 0 {
+		contentSource = s
+	} else if s := doc.Find("article"); s.Length() > 0 {
+		contentSource = s
+	} else if s := doc.Find("main"); s.Length() > 0 {
+		contentSource = s
+	} else {
+		contentSource = doc.Selection
+	}
+
+	// Remove scripts, styles, etc. from the source
+	contentSource.Find("script, style, nav, footer, header, aside").Remove()
+	textContent := strings.TrimSpace(contentSource.Text())
+	
+	fmt.Printf("📝 Clipped content length: %d chars\n", len(textContent))
+	
+	if len(textContent) < 50 {
+		fmt.Printf("⚠️ Warning: Very short content extracted. Might be a SPA or blocked.\n")
+	}
+
+	// Limit text length to avoid token limits
+	if len(textContent) > 10000 {
+		textContent = textContent[:10000]
+	}
+
+	// 3. Summarize using AI
+	prompt := fmt.Sprintf("请作为一位专业的知识管理助手，阅读以下网页内容，并提取核心摘要和要点。请用 Markdown 格式输出：\n\n%s", textContent)
+	aiResponse, err := getOllamaService().Generate(prompt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "AI generation failed"})
+		return
+	}
+
+	// 4. Convert AI markdown response to Tiptap-compatible JSON
+	contentJson := markdownToTiptapJSON(aiResponse)
+
+	// 5. Create Note with both contentJson and contentText
+	note := models.Note{
+		ID:          uuid.New().String(),
+		UserID:      userID,
+		Title:       title,
+		ContentJSON: contentJson,
+		ContentText: aiResponse,
+	}
+
+	if err := config.DB.Create(&note).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create note"})
+		return
+	}
+
+	// Index in vector DB for semantic search
+	go indexNoteInVectorDB(note.ID, note.Title, note.ContentText)
+
+	c.JSON(http.StatusCreated, note)
+}
+
+func GetStats(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	
+	type DailyCount struct {
+		Date  string `json:"date"`
+		Count int    `json:"count"`
+	}
+	
+	var results []DailyCount
+	// Get counts of notes created per day for the last 90 days
+	// Using SQLite strftime for date grouping
+	config.DB.Raw(`
+		SELECT strftime('%Y-%m-%d', created_at) as date, count(*) as count 
+		FROM notes 
+		WHERE user_id = ? AND created_at > date('now', '-90 days')
+		GROUP BY date
+	`, userID).Scan(&results)
+	
+	// Also get total count
+	var totalCount int64
+	config.DB.Model(&models.Note{}).Where("user_id = ? AND is_trashed = ?", userID, false).Count(&totalCount)
+
+	c.JSON(http.StatusOK, gin.H{
+		"daily": results,
+		"total": totalCount,
+	})
+}
+
 // --- Helper ---
 
 func indexNoteInVectorDB(noteID, title, contentText string) {
@@ -185,3 +364,66 @@ func indexNoteInVectorDB(noteID, title, contentText string) {
 		fmt.Printf("Failed to upsert note %s to Qdrant: %v\n", noteID, err)
 	}
 }
+
+// markdownToTiptapJSON converts a simple markdown string to Tiptap-compatible JSON.
+func markdownToTiptapJSON(md string) string {
+	type Node struct {
+		Type    string `json:"type"`
+		Attrs   map[string]interface{} `json:"attrs,omitempty"`
+		Content []interface{}          `json:"content,omitempty"`
+		Text    string                 `json:"text,omitempty"`
+	}
+
+	doc := struct {
+		Type    string `json:"type"`
+		Content []Node `json:"content"`
+	}{
+		Type:    "doc",
+		Content: []Node{},
+	}
+
+	lines := strings.Split(md, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		var node Node
+		if strings.HasPrefix(line, "# ") {
+			node = Node{
+				Type:  "heading",
+				Attrs: map[string]interface{}{"level": 1},
+				Content: []interface{}{Node{Type: "text", Text: line[2:]}},
+			}
+		} else if strings.HasPrefix(line, "## ") {
+			node = Node{
+				Type:  "heading",
+				Attrs: map[string]interface{}{"level": 2},
+				Content: []interface{}{Node{Type: "text", Text: line[3:]}},
+			}
+		} else if strings.HasPrefix(line, "### ") {
+			node = Node{
+				Type:  "heading",
+				Attrs: map[string]interface{}{"level": 3},
+				Content: []interface{}{Node{Type: "text", Text: line[4:]}},
+			}
+		} else if strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "* ") {
+			// Very simple bullet list item representation
+			node = Node{
+				Type: "paragraph",
+				Content: []interface{}{Node{Type: "text", Text: "• " + line[2:]}},
+			}
+		} else {
+			node = Node{
+				Type: "paragraph",
+				Content: []interface{}{Node{Type: "text", Text: line}},
+			}
+		}
+		doc.Content = append(doc.Content, node)
+	}
+
+	jsonData, _ := json.Marshal(doc)
+	return string(jsonData)
+}
+

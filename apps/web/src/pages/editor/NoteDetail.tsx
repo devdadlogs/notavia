@@ -1,15 +1,20 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
-import Image from '@tiptap/extension-image';
+import TextAlign from '@tiptap/extension-text-align';
+import { TextStyle, Color } from '@tiptap/extension-text-style';
+import Highlight from '@tiptap/extension-highlight';
+import { ResizableImage } from '../../components/editor/extensions/ResizableImage';
+import { Markdown } from 'tiptap-markdown';
 import api from '../../services/api';
-import { ChevronLeft, Gift, MoreVertical, Play, FastForward, Edit3, Sparkles, MessageSquarePlus, Menu, Wifi, WifiOff, Loader2 } from 'lucide-react';
+import { ChevronLeft, Gift, MoreVertical, Play, FastForward, Edit3, Sparkles, MessageSquarePlus, Menu, Wifi, WifiOff, Loader2, Pause, Volume2 } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
 import AIPanel from '../../components/editor/AIPanel';
+import EditorToolbar from '../../components/editor/EditorToolbar';
 import { aiService } from '../../services/ai';
 
 // Yjs Imports
@@ -32,6 +37,30 @@ export default function NoteDetail() {
   const [syncState, setSyncState] = useState<'connecting' | 'connected' | 'offline'>('connecting');
   const [sproutResults, setSproutResults] = useState<any[]>([]);
   const [isSprouting, setIsSprouting] = useState(false);
+  
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Guard flag: prevent content from being loaded from DB more than once per note open
+  const contentLoadedRef = useRef(false);
+
+  const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !id) return;
+
+    const formData = new FormData();
+    formData.append('audio', file);
+
+    try {
+      const { data } = await api.post(`/notes/${id}/audio`, formData);
+      setNoteData(prev => prev ? { ...prev, audioUrl: data.audioUrl } : null);
+    } catch (err) {
+      console.error('Audio upload failed', err);
+    }
+  };
 
   const handleSprout = async () => {
     setActiveTab('sprout');
@@ -49,14 +78,43 @@ export default function NoteDetail() {
 
   // 1. Initialize Yjs Document
   const ydoc = useMemo(() => new Y.Doc(), [id]);
+  const [yjsSynced, setYjsSynced] = useState(false);
 
   // 2. Setup Yjs Providers (IndexedDB + WebSocket)
   useEffect(() => {
     if (!id) return;
+    setYjsSynced(false);
+    contentLoadedRef.current = false; // Reset on note change
 
     // Offline persistence
     const indexeddbProvider = new IndexeddbPersistence(`notavia-note-${id}`, ydoc);
     
+    let idbSynced = false;
+    let wsSynced = false;
+
+    const checkAllSynced = () => {
+      // Only mark yjsSynced after BOTH IndexedDB and WebSocket have had a chance to sync.
+      // This prevents loading from DB before WebSocket delivers existing content from other browsers.
+      if (idbSynced && wsSynced) {
+        console.log('✅ Both Yjs IndexedDB + WebSocket synced for', id);
+        setYjsSynced(true);
+      }
+    };
+
+    indexeddbProvider.on('synced', () => {
+      console.log('✅ Yjs IndexedDB synced for', id);
+      idbSynced = true;
+      
+      // If IndexedDB already has content, we don't need to wait for WebSocket to load the editor
+      const xmlFragment = ydoc.getXmlFragment('default');
+      if (xmlFragment && xmlFragment.length > 0) {
+        console.log('⚡ IndexedDB has content, rendering instantly (skipping WebSocket wait)');
+        setYjsSynced(true);
+      } else {
+        checkAllSynced();
+      }
+    });
+
     // Real-time sync via Go WebSocket hub
     const wsUrl = `ws://localhost:3001/ws/yjs`;
     const wsProvider = new WebsocketProvider(wsUrl, id, ydoc);
@@ -65,7 +123,25 @@ export default function NoteDetail() {
       setSyncState(event.status === 'connected' ? 'connected' : 'offline');
     });
 
+    wsProvider.on('sync', (synced: boolean) => {
+      if (synced) {
+        console.log('✅ Yjs WebSocket synced for', id);
+        wsSynced = true;
+        checkAllSynced();
+      }
+    });
+
+    // Fallback: if WebSocket fails to connect or doesn't sync within 200ms, proceed anyway
+    const wsFallbackTimer = setTimeout(() => {
+      if (!wsSynced) {
+        console.log('⚠️ WebSocket sync timed out (200ms), proceeding with IndexedDB/DB fallback');
+        wsSynced = true;
+        checkAllSynced();
+      }
+    }, 200);
+
     return () => {
+      clearTimeout(wsFallbackTimer);
       wsProvider.destroy();
       indexeddbProvider.destroy();
     };
@@ -86,13 +162,36 @@ export default function NoteDetail() {
     }
   }, [id]);
 
-  // 3. Configure Tiptap with Collaboration Extension
+  const saveNoteContent = useCallback(async (contentJson: any, contentText: string) => {
+    setIsSaving(true);
+    try {
+      await api.put(`/notes/${id}`, {
+        contentJson: typeof contentJson === 'object' ? JSON.stringify(contentJson) : contentJson,
+        contentText: contentText || ''
+      });
+    } catch (error) {
+      console.error('Failed to save note content', error);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [id]);
+
+  // 3. Configure Tiptap with Collaboration Extension + formatting extensions
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ history: false }), // History must be disabled for Yjs
+      StarterKit.configure({
+        history: false,  // Required for Yjs collaboration
+        // StarterKit already includes Link and Underline — don't register separately
+      }),
       TaskList,
       TaskItem.configure({ nested: true }),
-      Image,
+      ResizableImage,
+      Markdown,
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      TextStyle,
+      Color,
+      Highlight.configure({ multicolor: false }),
+      // NOTE: Underline and Link are already bundled inside StarterKit in Tiptap v3
       Placeholder.configure({ placeholder: '在此记录你的灵感和想法...' }),
       Collaboration.configure({
         document: ydoc,
@@ -100,11 +199,11 @@ export default function NoteDetail() {
     ],
     onUpdate: ({ editor }) => {
       // Debounced save to traditional DB for fallback/search
-      saveNote(title, editor.getJSON(), editor.getText());
+      saveNoteContent(editor.getJSON(), editor.getText());
     }
   });
 
-  // Load Note Metadata and fallback content
+  // Load Note Metadata — only populate editor AFTER ALL Yjs providers sync
   useEffect(() => {
     const loadNote = async () => {
       try {
@@ -112,22 +211,37 @@ export default function NoteDetail() {
         setNoteData(data);
         setTitle(data.title === 'Untitled' ? '' : data.title);
         
-        // If Yjs document is completely empty, populate it from the database fallback
-        if (editor && !editor.isDestroyed && editor.getText().trim() === '') {
-          let content = data.contentJson;
-          if (typeof content === 'string' && content) {
-            try { content = JSON.parse(content); } catch (e) { content = ''; }
-            if (content) {
+        if (!editor || editor.isDestroyed) return;
+
+        // CRITICAL: Guard against double-loading content from DB.
+        // This prevents the cross-browser duplication bug where:
+        //   Browser A loads content → Yjs syncs via WebSocket to Browser B
+        //   Browser B IndexedDB is empty → it also loads from DB → DUPLICATE
+        if (contentLoadedRef.current) return;
+
+        // If Yjs document is still empty after ALL providers synced, populate from DB
+        if (editor.getText().trim() === '') {
+          const content = data.contentJson || data.contentText || '';
+          if (content) {
+            contentLoadedRef.current = true; // Mark as loaded BEFORE setContent to prevent re-entry
+            try {
+              const jsonContent = JSON.parse(content);
+              editor.commands.setContent(jsonContent);
+            } catch (e) {
               editor.commands.setContent(content);
             }
           }
+        } else {
+          // Yjs already has content (from WebSocket or IndexedDB), do NOT overwrite
+          contentLoadedRef.current = true;
         }
       } catch (error) {
         console.error('Failed to load note', error);
       }
     };
-    if (id && editor) loadNote();
-  }, [id, editor]);
+    // Wait for BOTH editor ready AND ALL Yjs providers sync complete
+    if (id && editor && yjsSynced) loadNote();
+  }, [id, editor, yjsSynced]);
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTitle = e.target.value;
@@ -203,20 +317,78 @@ export default function NoteDetail() {
             <span className="note-tag">产品构想</span>
           </div>
 
-          {/* Audio Player Mock */}
+          {/* Audio Player */}
           <div style={{ display: 'flex', alignItems: 'center', backgroundColor: 'var(--bg-input)', padding: '16px 24px', borderRadius: 'var(--radius-pill)', gap: '24px' }}>
-            <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>00:00:00</span>
-            <div style={{ flex: 1, height: '4px', backgroundColor: 'var(--border-color)', borderRadius: '2px', position: 'relative' }}>
-              <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: '30%', backgroundColor: 'var(--primary-color)', borderRadius: '2px' }} />
-              <div style={{ position: 'absolute', left: '30%', top: '50%', transform: 'translate(-50%, -50%)', width: '12px', height: '12px', backgroundColor: 'var(--primary-color)', borderRadius: '50%' }} />
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              style={{ display: 'none' }} 
+              accept="audio/*" 
+              onChange={handleAudioUpload} 
+            />
+            
+            <audio 
+              ref={audioRef}
+              src={noteData?.audioUrl ? `http://localhost:3001${noteData.audioUrl}` : undefined}
+              onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
+              onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
+              onEnded={() => setIsPlaying(false)}
+            />
+
+            <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+              {new Date(currentTime * 1000).toISOString().substr(11, 8)}
+            </span>
+            
+            <div style={{ flex: 1, height: '4px', backgroundColor: 'var(--border-color)', borderRadius: '2px', position: 'relative', cursor: 'pointer' }} onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const x = e.clientX - rect.left;
+              const pct = x / rect.width;
+              if (audioRef.current) audioRef.current.currentTime = pct * duration;
+            }}>
+              <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${(currentTime / duration) * 100 || 0}%`, backgroundColor: 'var(--primary-color)', borderRadius: '2px' }} />
+              <div style={{ position: 'absolute', left: `${(currentTime / duration) * 100 || 0}%`, top: '50%', transform: 'translate(-50%, -50%)', width: '12px', height: '12px', backgroundColor: 'var(--primary-color)', borderRadius: '50%' }} />
             </div>
-            <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-tertiary)' }}>00:00:48</span>
+            
+            <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-tertiary)' }}>
+              {new Date(duration * 1000).toISOString().substr(11, 8)}
+            </span>
             
             <div style={{ display: 'flex', gap: '24px', alignItems: 'center', marginLeft: '24px' }}>
-              <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}><FastForward size={18} style={{ transform: 'rotate(180deg)' }} /></button>
-              <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-primary)' }}><Play size={24} fill="currentColor" /></button>
-              <button style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}><FastForward size={18} /></button>
-              <span style={{ fontSize: '12px', color: 'var(--text-secondary)', backgroundColor: 'white', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-color)' }}>1.0x</span>
+              <button 
+                onClick={() => { if (audioRef.current) audioRef.current.currentTime -= 5; }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
+              >
+                <FastForward size={18} style={{ transform: 'rotate(180deg)' }} />
+              </button>
+              
+              <button 
+                onClick={() => {
+                  if (!noteData?.audioUrl) {
+                    fileInputRef.current?.click();
+                    return;
+                  }
+                  if (isPlaying) {
+                    audioRef.current?.pause();
+                  } else {
+                    audioRef.current?.play();
+                  }
+                  setIsPlaying(!isPlaying);
+                }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-primary)' }}
+              >
+                {isPlaying ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" />}
+              </button>
+              
+              <button 
+                onClick={() => { if (audioRef.current) audioRef.current.currentTime += 5; }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
+              >
+                <FastForward size={18} />
+              </button>
+              
+              {!noteData?.audioUrl && (
+                <span style={{ fontSize: '11px', color: 'var(--accent-color)', fontWeight: 600 }}>点击上传录音</span>
+              )}
             </div>
           </div>
         </div>
@@ -232,7 +404,12 @@ export default function NoteDetail() {
         {/* Tab Content Area */}
         <div style={{ flex: 1 }}>
           {activeTab === 'note' && (
-            <EditorContent editor={editor} />
+            <div>
+              <EditorToolbar editor={editor} noteTitle={title} />
+              <div style={{ padding: '0 10%' }}>
+                <EditorContent editor={editor} />
+              </div>
+            </div>
           )}
           {activeTab === 'sprout' && (
             <div style={{ padding: '24px 0' }}>
@@ -270,9 +447,31 @@ export default function NoteDetail() {
               )}
             </div>
           )}
-          {activeTab !== 'note' && activeTab !== 'sprout' && (
-            <div style={{ color: 'var(--text-tertiary)', textAlign: 'center', marginTop: '40px' }}>
-              此功能正在开发中...
+          {activeTab === 'transcript' && (
+            <div className="fade-in" style={{ padding: '24px 0', lineHeight: 1.8, color: 'var(--text-primary)' }}>
+              {noteData?.audioUrl ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ padding: '16px', backgroundColor: 'var(--bg-input)', borderRadius: '12px', fontSize: '14px' }}>
+                    <p style={{ marginBottom: '8px', fontWeight: 600 }}>AI 自动生成摘要：</p>
+                    <p style={{ color: 'var(--text-secondary)' }}>这是一段关于本地 AI 部署和知识主权的讨论。用户重点提到了如何通过 Ollama 和 Docker 在个人服务器上运行大模型，以确保数据不外传。</p>
+                  </div>
+                  <p>00:01 今天我们来聊聊 NovaNote 的核心架构...</p>
+                  <p>00:15 为什么要坚持本地化部署？因为数据主权是未来的核心竞争力...</p>
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-tertiary)' }}>
+                  请先上传录音文件以生成原文
+                </div>
+              )}
+            </div>
+          )}
+          {activeTab === 'append' && (
+            <div className="fade-in" style={{ padding: '24px 0' }}>
+              <textarea 
+                placeholder="在此输入追加内容..." 
+                style={{ width: '100%', minHeight: '200px', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-panel)', outline: 'none', resize: 'none' }}
+              />
+              <button className="btn btn-primary" style={{ marginTop: '16px' }}>保存追加</button>
             </div>
           )}
         </div>

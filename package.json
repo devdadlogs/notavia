@@ -16,5 +16,12 @@
   "packageManager": "pnpm@9.0.0",
   "engines": {
     "node": ">=18"
+  },
+  "pnpm": {
+    "overrides": {
+      "@tiptap/pm": "3.26.1",
+      "@tiptap/core": "3.26.1"
+    }
   }
 }
+

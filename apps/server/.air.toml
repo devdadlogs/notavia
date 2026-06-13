@@ -1,0 +1,63 @@
+# Config file for [Air](https://github.com/cosmtrek/air) in TOML format
+
+# Working directory
+# . or absolute path, please note that the subdirectories are considered but not the parent ("..")
+root = "."
+tmp_dir = "tmp"
+
+[build]
+# Just plain old shell command. You could use `make` as well.
+cmd = "go build -o ./tmp/main ./cmd/server/main.go"
+# Binary file yields from `cmd`.
+bin = "tmp/main"
+# Customize binary, can be string or list.
+full_bin = "APP_ENV=dev ./tmp/main"
+# Watch these filename extensions.
+include_ext = ["go", "tpl", "html", "tmpl", "env"]
+# Ignore these filename extensions or directories.
+exclude_dir = ["assets", "tmp", "vendor", "frontend/node_modules"]
+# Watch these directories if you specified.
+include_dir = []
+# Exclude files.
+exclude_file = []
+# Exclude specific regular expressions.
+exclude_regex = ["_test.go"]
+# Exclude unchanged files.
+exclude_unchanged = true
+# Follow symlink for directories
+follow_symlink = true
+# This log file places in your tmp_dir.
+log = "air.log"
+# Poll files of watch.
+poll = false
+# Poll interval (ms)
+poll_interval = 0
+# Delay after triggering build.
+delay = 1000 # ms
+# Stop running old binary when build errors occur.
+stop_on_error = true
+# Send Interrupt signal before killing process. Only for windows.
+send_interrupt = false
+# Delay after sending Interrupt signal.
+kill_delay = 500 # ms
+
+[log]
+# Show log time
+time = true
+# Only show main log (not build, root, etc.)
+main_only = false
+
+[color]
+# Customize each part's color. If no color found, use the raw log.
+main = "magenta"
+# watcher = "cyan"
+build = "yellow"
+runner = "green"
+
+[misc]
+# Delete tmp directory on exit
+clean_on_exit = true
+
+[screen]
+clear_on_rebuild = false
+keep_scroll = true

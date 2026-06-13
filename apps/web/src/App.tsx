@@ -7,6 +7,10 @@ import Register from './pages/auth/Register';
 import MainLayout from './components/layout/MainLayout';
 import Dashboard from './pages/home/Dashboard';
 import NoteDetail from './pages/editor/NoteDetail';
+import CalendarPage from './pages/features/Calendar';
+import DailyReport from './pages/features/DailyReport';
+import SproutReport from './pages/features/SproutReport';
+import Trash from './pages/features/Trash';
 
 function App() {
   const { checkAuth, isAuthenticated, isLoading } = useAuthStore();
@@ -42,6 +46,10 @@ function App() {
       >
         <Route index element={<Dashboard />} />
         <Route path="n/:id" element={<NoteDetail />} />
+        <Route path="calendar" element={<CalendarPage />} />
+        <Route path="daily" element={<DailyReport />} />
+        <Route path="report" element={<SproutReport />} />
+        <Route path="trash" element={<Trash />} />
         {/* Placeholder routes for sidebar items */}
         <Route path="*" element={<Dashboard />} />
       </Route>

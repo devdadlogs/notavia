@@ -258,11 +258,16 @@ ul[data-type="taskList"] li > div {
 .ProseMirror table {
   border-collapse: collapse;
   width: 100%;
-  margin: 1.5rem 0;
+  margin: 2rem 0 1rem;
   font-size: 14px;
   overflow: hidden;
-  border-radius: var(--radius-md);
+  border-radius: 0;
   border: 1px solid var(--border-color);
+  transition: box-shadow 0.15s ease-in-out;
+}
+
+.ProseMirror table.table-hovered {
+  box-shadow: 0 0 0 4px #f0f0f0; /* Lighter gray hover effect */
 }
 
 .ProseMirror th,
@@ -298,14 +303,97 @@ ul[data-type="taskList"] li > div {
   pointer-events: none;
 }
 
+
+
 /* Resize handle for tables */
 .ProseMirror .column-resize-handle {
   position: absolute;
-  right: -2px; top: 0; bottom: 0;
-  width: 4px;
-  background-color: var(--primary-color);
-  pointer-events: none;
+  right: -1px; top: 0; bottom: 0;
+  width: 2px;
+  background-color: #1677ff !important;
+  pointer-events: auto;
+  cursor: col-resize;
   z-index: 20;
 }
 
+/* Prevent cursor flickering during table column resize */
+.resize-cursor,
+.resize-cursor * {
+  cursor: col-resize !important;
+}
 
+/* Insert Button Styles */
+.table-insert-btn-inner {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: white;
+  color: #666;
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  transition: all 0.2s;
+}
+
+.table-insert-btn-inner:hover {
+  background: #f0f0f0;
+  color: #1677ff;
+  border-color: #1677ff;
+}
+
+/* Table Grip Menu Styles */
+.table-menu-popup {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  padding: 4px;
+  min-width: 140px;
+  display: flex;
+  flex-direction: column;
+  font-family: inherit;
+}
+
+.table-menu-popup .menu-group-title {
+  padding: 4px 8px;
+  font-size: 12px;
+  color: #999;
+  user-select: none;
+}
+
+.table-menu-popup .menu-item-btn {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: #333;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.table-menu-popup .menu-item-btn:hover {
+  background: #f0f0f0;
+}
+
+.table-menu-popup .menu-item-btn.danger {
+  color: #ff4d4f;
+}
+
+.table-menu-popup .menu-item-btn.danger:hover {
+  background: #fff1f0;
+}
+
+.table-menu-popup .menu-divider {
+  height: 1px;
+  background: #f0f0f0;
+  margin: 4px 0;
+}

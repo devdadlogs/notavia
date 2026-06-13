@@ -6,8 +6,11 @@ import {
   List, ListOrdered, Quote, Minus,
   Heading1, Heading2, Heading3, Highlighter,
   Palette, Download, RotateCcw, RotateCw,
-  Type, ChevronDown
+  Type, ChevronDown, TableProperties, Trash2,
+  Rows, Columns, ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
+  Table as TableIcon
 } from 'lucide-react';
+import { TableHoverControls } from './TableHoverControls';
 
 interface ToolbarProps {
   editor: Editor | null;
@@ -339,7 +342,53 @@ export default function EditorToolbar({ editor, noteTitle }: ToolbarProps) {
         <ToolbarBtn onClick={() => exportMarkdown(editor, noteTitle)} active={false} title="导出为 Markdown (.md)">
           <Download size={15} />
         </ToolbarBtn>
+        <ToolbarSep />
+
+        <ToolbarBtn onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} active={false} title="插入 3x3 表格">
+          <TableIcon size={15} />
+        </ToolbarBtn>
       </div>
+
+      {/* Table Context Toolbar */}
+      {editor.can().addColumnBefore() && (
+        <div style={{
+          display: 'flex', alignItems: 'center', flexWrap: 'wrap',
+          gap: '2px', padding: '4px 12px',
+          borderBottom: '1px solid var(--border-color)',
+          background: 'var(--bg-panel-hover)',
+          fontSize: '12px', color: 'var(--text-secondary)'
+        }}>
+          <TableProperties size={14} style={{ marginRight: '8px' }} />
+          <span style={{ marginRight: '12px', fontWeight: 500 }}>表格操作</span>
+          
+          <ToolbarBtn onClick={() => editor.chain().focus().addRowBefore().run()} title="在上方插入行">
+            <ArrowUp size={14} />
+          </ToolbarBtn>
+          <ToolbarBtn onClick={() => editor.chain().focus().addRowAfter().run()} title="在下方插入行">
+            <ArrowDown size={14} />
+          </ToolbarBtn>
+          <ToolbarBtn onClick={() => editor.chain().focus().deleteRow().run()} title="删除当前行">
+            <Rows size={14} color="var(--error-color)" />
+          </ToolbarBtn>
+          <ToolbarSep />
+          <ToolbarBtn onClick={() => editor.chain().focus().addColumnBefore().run()} title="在左侧插入列">
+            <ArrowLeft size={14} />
+          </ToolbarBtn>
+          <ToolbarBtn onClick={() => editor.chain().focus().addColumnAfter().run()} title="在右侧插入列">
+            <ArrowRight size={14} />
+          </ToolbarBtn>
+          <ToolbarBtn onClick={() => editor.chain().focus().deleteColumn().run()} title="删除当前列">
+            <Columns size={14} color="var(--error-color)" />
+          </ToolbarBtn>
+          <ToolbarSep />
+          <ToolbarBtn onClick={() => editor.chain().focus().deleteTable().run()} title="删除整个表格">
+            <Trash2 size={14} color="var(--error-color)" />
+          </ToolbarBtn>
+        </div>
+      )}
+
+      {/* Advanced hover-based Table Controls overlay */}
+      <TableHoverControls editor={editor} />
 
       {/* Floating selection toolbar */}
       {floatingPos && (

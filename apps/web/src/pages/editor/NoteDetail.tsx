@@ -9,6 +9,7 @@ import TextAlign from '@tiptap/extension-text-align';
 import { TextStyle, Color } from '@tiptap/extension-text-style';
 import Highlight from '@tiptap/extension-highlight';
 import { ResizableImage } from '../../components/editor/extensions/ResizableImage';
+import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
 import { Markdown } from 'tiptap-markdown';
 import api from '../../services/api';
 import { ChevronLeft, Gift, MoreVertical, Play, FastForward, Edit3, Sparkles, MessageSquarePlus, Menu, Wifi, WifiOff, Loader2, Pause, Volume2 } from 'lucide-react';
@@ -191,6 +192,10 @@ export default function NoteDetail() {
       TextStyle,
       Color,
       Highlight.configure({ multicolor: false }),
+      Table.configure({ resizable: true }),
+      TableRow,
+      TableCell,
+      TableHeader,
       // NOTE: Underline and Link are already bundled inside StarterKit in Tiptap v3
       Placeholder.configure({ placeholder: '在此记录你的灵感和想法...' }),
       Collaboration.configure({

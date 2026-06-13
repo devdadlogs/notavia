@@ -9,7 +9,7 @@ interface SettingsModalProps {
 }
 
 const PROVIDERS = [
-  { id: 'deepseek', name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-coder'] },
+  { id: 'deepseek', name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', models: ['deepseek-v4-flash', 'deepseek-v4-pro'] },
   { id: 'moonshot', name: 'Kimi (月之暗面)', baseUrl: 'https://api.moonshot.cn/v1', models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'] },
   { id: 'qwen', name: '通义千问 (阿里云)', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', models: ['qwen-turbo', 'qwen-plus', 'qwen-max'] },
   { id: 'zhipu', name: '智谱 GLM', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', models: ['glm-4', 'glm-4-air', 'glm-4-flash'] },
@@ -65,18 +65,22 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const handleSave = async () => {
     try {
       setIsSaving(true);
-      await api.put('/auth/me/llm-config', {
+      const response = await api.put('/auth/me/llm-config', {
         llmProvider,
         openAiBaseUrl,
         openAiKey,
         openAiModel,
       });
-      updateUser({
-        llmProvider,
-        openAiBaseUrl,
-        openAiKey,
-        openAiModel,
-      });
+      if (response.data && response.data.user) {
+        updateUser(response.data.user);
+      } else {
+        updateUser({
+          llmProvider,
+          openAiBaseUrl,
+          openAiKey,
+          openAiModel,
+        });
+      }
       onClose();
     } catch (err) {
       console.error('Failed to save settings', err);

@@ -24,6 +24,11 @@ func NewOpenAIProvider(baseURL, apiKey, model string) *OpenAIProvider {
 	if model == "" {
 		model = "gpt-4o-mini"
 	}
+	
+	// Clean up apiKey
+	apiKey = strings.TrimSpace(apiKey)
+	apiKey = strings.TrimPrefix(apiKey, "Bearer ")
+	apiKey = strings.TrimPrefix(apiKey, "bearer ")
 	return &OpenAIProvider{
 		baseURL: baseURL,
 		apiKey:  apiKey,
@@ -92,7 +97,11 @@ func (p *OpenAIProvider) Generate(prompt string) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("openai error (status %d)", resp.StatusCode)
+		maskedKey := p.apiKey
+		if len(maskedKey) > 8 {
+			maskedKey = maskedKey[:4] + "..." + maskedKey[len(maskedKey)-4:]
+		}
+		return "", fmt.Errorf("openai error (status %d) url: %s, key: %s", resp.StatusCode, p.baseURL, maskedKey)
 	}
 
 	var result struct {
@@ -139,7 +148,11 @@ func (p *OpenAIProvider) GenerateJSON(prompt string) (string, error) {
 
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("openai error (status %d): %s", resp.StatusCode, string(b))
+		maskedKey := p.apiKey
+		if len(maskedKey) > 8 {
+			maskedKey = maskedKey[:4] + "..." + maskedKey[len(maskedKey)-4:]
+		}
+		return "", fmt.Errorf("openai error (status %d) url: %s, key: %s: %s", resp.StatusCode, p.baseURL, maskedKey, string(b))
 	}
 
 	var result struct {
@@ -185,7 +198,12 @@ func (p *OpenAIProvider) GenerateStream(prompt string, outChan chan<- string, er
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		errChan <- fmt.Errorf("openai error (status %d)", resp.StatusCode)
+		maskedKey := p.apiKey
+		if len(maskedKey) > 8 {
+			maskedKey = maskedKey[:4] + "..." + maskedKey[len(maskedKey)-4:]
+		}
+		b, _ := io.ReadAll(resp.Body)
+		errChan <- fmt.Errorf("openai error (status %d) url: %s, key: %s, body: %s", resp.StatusCode, p.baseURL, maskedKey, string(b))
 		return
 	}
 

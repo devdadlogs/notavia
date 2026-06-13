@@ -127,17 +127,23 @@ func UpdateLLMConfig(c *gin.Context) {
 		return
 	}
 
-	if err := config.DB.Model(&models.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
-		"llm_provider":     input.LLMProvider,
-		"open_ai_base_url": input.OpenAIBaseURL,
-		"open_ai_key":      input.OpenAIKey,
-		"open_ai_model":    input.OpenAIModel,
-	}).Error; err != nil {
+	err := config.DB.Exec("UPDATE users SET llm_provider = ?, open_ai_base_url = ?, open_ai_key = ?, open_ai_model = ? WHERE id = ?",
+		input.LLMProvider, input.OpenAIBaseURL, input.OpenAIKey, input.OpenAIModel, userID).Error
+
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update LLM config"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "LLM config updated successfully"})
+	// Double check by reading it back to ensure it was saved
+	var checkUser models.User
+	config.DB.Where("id = ?", userID).First(&checkUser)
+	
+	// Update frontend user store
+	c.JSON(http.StatusOK, gin.H{
+		"message": "LLM config updated successfully",
+		"user": sanitizeUser(checkUser),
+	})
 }
 
 // --- Helpers ---

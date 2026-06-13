@@ -289,7 +289,7 @@ export default function NoteDetail() {
       </header>
 
       {/* Main Content Scroll Area */}
-      <main style={{ flex: 1, overflowY: 'auto', padding: '32px 10%', display: 'flex', flexDirection: 'column' }}>
+      <main style={{ flex: 1, overflowY: 'auto', padding: '32px 5%', display: 'flex', flexDirection: 'column' }}>
         
         {/* Note Header Info */}
         <div className="note-header-layout">
@@ -413,7 +413,7 @@ export default function NoteDetail() {
             <div>
               <EditorToolbar editor={editor} noteTitle={title} />
               <BlockHoverControls editor={editor} />
-              <div style={{ padding: '0 10%' }}>
+              <div style={{ width: '100%' }}>
                 <EditorContent editor={editor} />
               </div>
             </div>

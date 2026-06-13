@@ -6,6 +6,7 @@ import {
   Image as ImageIcon, Table as TableIcon, Code, Paperclip, Link,
   FileVideo, Music, Lock, Globe, Plus, Hash
 } from 'lucide-react';
+import { uploadFile } from '../../utils/fileUpload';
 
 interface BlockHoverControlsProps {
   editor: Editor | null;
@@ -18,6 +19,13 @@ export function BlockHoverControls({ editor }: BlockHoverControlsProps) {
   const btnRef = useRef<HTMLButtonElement>(null);
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const imgInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const actionPosRef = useRef<number | null>(null);
+  const [linkDialog, setLinkDialog] = useState<{ open: boolean, text: string, url: string, pos: number }>({
+    open: false, text: '', url: '', pos: 0
+  });
 
   useEffect(() => {
     if (!editor) return;
@@ -58,28 +66,19 @@ export function BlockHoverControls({ editor }: BlockHoverControlsProps) {
       const node = resolvedPos.parent;
 
       // We specifically want to show the "+" sign on empty paragraphs.
-      if (node.type.name === 'paragraph' && node.content.size === 0 && resolvedPos.depth > 0) {
-        // Exclude paragraphs that are inside a table
-        let isInTable = false;
-        for (let i = resolvedPos.depth; i > 0; i--) {
-          if (resolvedPos.node(i).type.name === 'table') {
-            isInTable = true;
-            break;
-          }
-        }
-
-        if (!isInTable) {
-          // We need the DOM node to get the exact Y position
-          const domNode = view.nodeDOM(resolvedPos.before(resolvedPos.depth)) as HTMLElement;
-          if (domNode && domNode.nodeType === 1) {
-            const rect = domNode.getBoundingClientRect();
-            // We place the button to the left of the text block
-            const left = rect.left - 30; // slightly further left to ensure safe gap
-            const top = rect.top;
-            
-            setHoverState({ top, left, pos: resolvedPos.before(resolvedPos.depth), node });
-            return;
-          }
+      // (The user requested: "只有单独一行是空行才显示+号，比如在列表中不显示")
+      // depth === 1 ensures it's a top-level block, not inside lists or tables.
+      if (node.type.name === 'paragraph' && node.content.size === 0 && resolvedPos.depth === 1) {
+        // We need the DOM node to get the exact Y position
+        const domNode = view.nodeDOM(resolvedPos.before(resolvedPos.depth)) as HTMLElement;
+        if (domNode && domNode.nodeType === 1) {
+          const rect = domNode.getBoundingClientRect();
+          // We place the button to the left of the text block
+          const left = rect.left - 30; // slightly further left to ensure safe gap
+          const top = rect.top;
+          
+          setHoverState({ top, left, pos: resolvedPos.before(resolvedPos.depth), node });
+          return;
         }
       }
 
@@ -137,17 +136,73 @@ export function BlockHoverControls({ editor }: BlockHoverControlsProps) {
     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
   };
 
-  if (!editor || !hoverState) return null;
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || actionPosRef.current === null) return;
+    try {
+      const url = await uploadFile(file);
+      editor.chain().focus()
+        .setNodeSelection(actionPosRef.current)
+        .insertContent({ type: 'resizableImage', attrs: { src: url } })
+        .run();
+      setIsMenuOpen(false);
+      setHoverState(null);
+      actionPosRef.current = null;
+    } catch (err) {
+      console.error(err);
+      alert("上传图片失败");
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || actionPosRef.current === null) return;
+    try {
+      const url = await uploadFile(file);
+      editor.chain().focus()
+        .setNodeSelection(actionPosRef.current)
+        .insertContent({
+          type: 'text',
+          text: file.name,
+          marks: [{ type: 'link', attrs: { href: url, download: true, target: '_blank' } }]
+        })
+        .run();
+      setIsMenuOpen(false);
+      setHoverState(null);
+      actionPosRef.current = null;
+    } catch (err) {
+      console.error(err);
+      alert("上传文件失败");
+    }
+  };
+
+  const submitLink = () => {
+    if (!linkDialog.url) return;
+    editor.chain().focus()
+      .setNodeSelection(linkDialog.pos)
+      .insertContent({
+        type: 'text',
+        text: linkDialog.text || linkDialog.url,
+        marks: [{ type: 'link', attrs: { href: linkDialog.url } }]
+      })
+      .run();
+    setLinkDialog({ ...linkDialog, open: false });
+    setIsMenuOpen(false);
+    setHoverState(null);
+  };
+
+  if (!editor || (!hoverState && !linkDialog.open)) return null;
 
   const insertBlock = (action: () => void) => {
+    if (!hoverState) return;
     setIsMenuOpen(false);
     // Focus the editor, move cursor to the target block, and perform the action
     editor.chain().focus().setNodeSelection(hoverState.pos).run();
     action();
   };
 
-  const spaceBelow = window.innerHeight - hoverState.top - 24;
-  const spaceAbove = hoverState.top;
+  const spaceBelow = hoverState ? window.innerHeight - hoverState.top - 24 : 0;
+  const spaceAbove = hoverState ? hoverState.top : 0;
   const openUpwards = spaceBelow < 420 && spaceAbove > spaceBelow;
   
   const dynamicMaxHeight = openUpwards 
@@ -173,9 +228,63 @@ export function BlockHoverControls({ editor }: BlockHoverControlsProps) {
 
   return (
     <>
-      <button
-        ref={btnRef}
-        onMouseEnter={handleMouseEnterBtn}
+      {/* Hidden Inputs */}
+      <input type="file" accept="image/png, image/jpeg, image/gif, image/webp" ref={imgInputRef} style={{ display: 'none' }} onChange={handleImageUpload} />
+      <input type="file" ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileUpload} />
+
+      {/* Link Dialog */}
+      {linkDialog.open && (
+        <div style={{
+          position: 'fixed',
+          top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+          background: 'var(--bg-panel)',
+          padding: '20px',
+          borderRadius: '8px',
+          boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
+          zIndex: 1000,
+          width: '320px',
+          border: '1px solid var(--border-color)'
+        }}>
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'block', fontSize: '13px', marginBottom: '8px', color: 'var(--text-primary)' }}>文本</label>
+            <input 
+              autoFocus
+              type="text" 
+              placeholder="请输入文本" 
+              value={linkDialog.text}
+              onChange={e => setLinkDialog({ ...linkDialog, text: e.target.value })}
+              style={{ width: '100%', padding: '8px 12px', border: '1px solid #1677ff', borderRadius: '4px', background: 'var(--bg-color)', outline: 'none' }}
+            />
+          </div>
+          <div style={{ marginBottom: '24px' }}>
+            <label style={{ display: 'block', fontSize: '13px', marginBottom: '8px', color: 'var(--text-primary)' }}>
+              <span style={{ color: 'red' }}>*</span> 链接地址
+            </label>
+            <input 
+              type="text" 
+              placeholder="请输入链接地址" 
+              value={linkDialog.url}
+              onChange={e => setLinkDialog({ ...linkDialog, url: e.target.value })}
+              style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border-color)', borderRadius: '4px', background: 'var(--bg-color)', outline: 'none' }}
+            />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <button 
+              onClick={() => { setLinkDialog({ ...linkDialog, open: false }); setIsMenuOpen(false); }}
+              style={{ padding: '6px 16px', background: 'var(--bg-panel-hover)', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'var(--text-primary)' }}
+            >取消</button>
+            <button 
+              onClick={submitLink}
+              style={{ padding: '6px 16px', background: '#d0d7e6', border: 'none', borderRadius: '4px', cursor: 'pointer', color: '#555' }}
+            >确定</button>
+          </div>
+        </div>
+      )}
+
+      {hoverState && (
+        <button
+          ref={btnRef}
+          onMouseEnter={handleMouseEnterBtn}
         onMouseLeave={handleMouseLeaveBtn}
         style={{
           position: 'fixed',
@@ -196,6 +305,7 @@ export function BlockHoverControls({ editor }: BlockHoverControlsProps) {
       >
         <Plus size={14} />
       </button>
+      )}
 
       {isMenuOpen && (
         <div
@@ -237,15 +347,21 @@ export function BlockHoverControls({ editor }: BlockHoverControlsProps) {
           <div style={{ height: '1px', background: 'var(--border-color)', margin: '8px 0' }} />
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)', padding: '4px 12px', fontWeight: 500 }}>通用</div>
           {renderMenuItem(<ImageIcon size={15}/>, "图片", () => {
-             // Let user handle upload manually or just insert a placeholder
-             // Actually, the editor usually uses fileInputRef. Here we can just alert or simulate a click on the upload button.
-             // We can provide a basic setNodeSelection and let the user paste.
-             editor.commands.insertContent('<img src="" alt="Placeholder">');
+             actionPosRef.current = hoverState!.pos;
+             setIsMenuOpen(false);
+             imgInputRef.current?.click();
           })}
           {renderMenuItem(<TableIcon size={15}/>, "表格", () => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run())}
           {renderMenuItem(<Code size={15}/>, "代码块", () => editor.chain().focus().toggleCodeBlock().run())}
-          {renderMenuItem(<Paperclip size={15}/>, "文件", () => {})}
-          {renderMenuItem(<Link size={15}/>, "链接", () => {})}
+          {renderMenuItem(<Paperclip size={15}/>, "文件", () => {
+             actionPosRef.current = hoverState!.pos;
+             setIsMenuOpen(false);
+             fileInputRef.current?.click();
+          })}
+          {renderMenuItem(<Link size={15}/>, "链接", () => {
+             setIsMenuOpen(false);
+             setLinkDialog({ open: true, text: '', url: '', pos: hoverState.pos });
+          })}
           {renderMenuItem(<Minus size={15}/>, "分割线", () => editor.chain().focus().setHorizontalRule().run())}
           {renderMenuItem(<Hash size={15}/>, "流程图/UML", () => {})}
           {renderMenuItem(<Music size={15}/>, "音频", () => {})}

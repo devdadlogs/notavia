@@ -1,12 +1,17 @@
 package services
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+)
 
 // LLMProvider is the universal interface for large language model inference.
 type LLMProvider interface {
 	CheckHealth() (bool, error)
 	ListModels() ([]string, error)
 	Generate(prompt string) (string, error)
+	GenerateJSON(prompt string) (string, error)
 	GenerateStream(prompt string, outChan chan<- string, errChan chan<- error)
 	Embed(text string) ([]float32, error)
 }
@@ -236,11 +241,41 @@ func SuggestTagsStream(provider LLMProvider, content string, outChan chan<- stri
 		content = string(runes[:4000]) // For tags, first 4000 chars are usually enough context
 	}
 
-	prompt := fmt.Sprintf(`根据以下笔记内容，推荐 3-5 个简短的分类标签。每个标签用逗号分隔，不要添加序号或其他格式。
+	prompt := fmt.Sprintf(`作为专业的标签分类助手，你的任务是从以下笔记内容中提取 3-5 个分类标签。
+请严格输出 JSON 格式。包含一个 "tags" 数组，数组里的每一项是一个标签字符串。绝对不要输出任何其他文字或解释！
+
+示例格式：
+{
+  "tags": ["项目管理", "需求分析", "前端开发"]
+}
 
 笔记内容：
-%s
+%s`, content)
 
-推荐标签：`, content)
-	go provider.GenerateStream(prompt, outChan, errChan)
+	go func() {
+		defer close(outChan)
+		defer close(errChan)
+
+		// This uses strict JSON generation format
+		jsonStr, err := provider.GenerateJSON(prompt)
+		if err != nil {
+			errChan <- fmt.Errorf("tags extraction failed: %w", err)
+			return
+		}
+
+		// Try to parse the JSON and extract the tags
+		var result map[string][]string
+		if err := json.Unmarshal([]byte(jsonStr), &result); err == nil && len(result["tags"]) > 0 {
+			// Join tags cleanly and send to the stream as a single chunk
+			outChan <- strings.Join(result["tags"], ", ")
+		} else {
+			// Fallback if parsing fails or tags are empty
+			// Try to clean up any raw markdown wrapping like ```json
+			cleanStr := strings.TrimPrefix(jsonStr, "```json")
+			cleanStr = strings.TrimPrefix(cleanStr, "```")
+			cleanStr = strings.TrimSuffix(cleanStr, "```")
+			cleanStr = strings.TrimSpace(cleanStr)
+			outChan <- cleanStr
+		}
+	}()
 }

@@ -19,9 +19,10 @@ type OllamaService struct {
 
 // OllamaGenerateRequest is the request body for Ollama /api/generate.
 type OllamaGenerateRequest struct {
-	Model  string `json:"model"`
-	Prompt string `json:"prompt"`
-	Stream bool   `json:"stream"`
+	Model   string                 `json:"model"`
+	Prompt  string                 `json:"prompt"`
+	Stream  bool                   `json:"stream"`
+	Format  string                 `json:"format,omitempty"`
 	Options map[string]interface{} `json:"options,omitempty"`
 }
 
@@ -133,6 +134,38 @@ func (s *OllamaService) Generate(prompt string) (string, error) {
 	resp, err := http.Post(s.baseURL+"/api/generate", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("ollama request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		b, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("ollama error (status %d): %s", resp.StatusCode, string(b))
+	}
+
+	var result OllamaGenerateResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(result.Response), nil
+}
+
+// GenerateJSON sends a prompt and enforces JSON output formatting.
+func (s *OllamaService) GenerateJSON(prompt string) (string, error) {
+	reqBody := OllamaGenerateRequest{
+		Model:  s.model,
+		Prompt: prompt,
+		Stream: false,
+		Format: "json", // Enforces strict JSON output
+		Options: map[string]interface{}{
+			"temperature": 0.3, // Lower temperature for more predictable structured output
+		},
+	}
+
+	body, _ := json.Marshal(reqBody)
+	resp, err := http.Post(s.baseURL+"/api/generate", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("ollama JSON request failed: %w", err)
 	}
 	defer resp.Body.Close()
 

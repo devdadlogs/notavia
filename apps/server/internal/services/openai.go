@@ -69,6 +69,49 @@ func (p *OpenAIProvider) ListModels() ([]string, error) {
 	return models, nil
 }
 
+func (p *OpenAIProvider) Generate(prompt string) (string, error) {
+	payload := map[string]interface{}{
+		"model": p.model,
+		"messages": []map[string]string{
+			{"role": "user", "content": prompt},
+		},
+		"stream":      false,
+		"temperature": 0.7,
+	}
+
+	body, _ := json.Marshal(payload)
+	req, _ := http.NewRequest("POST", p.baseURL+"/chat/completions", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("openai request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("openai error (status %d)", resp.StatusCode)
+	}
+
+	var result struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+
+	if len(result.Choices) > 0 {
+		return result.Choices[0].Message.Content, nil
+	}
+	return "", nil
+}
+
 func (p *OpenAIProvider) GenerateStream(prompt string, outChan chan<- string, errChan chan<- error) {
 	defer close(outChan)
 

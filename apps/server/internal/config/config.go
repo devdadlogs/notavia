@@ -15,6 +15,12 @@ type Config struct {
 	OllamaURL  string
 	UploadDir  string
 	CORSOrigin string
+
+	// LLM Provider Configuration
+	LLMProvider   string // "ollama" or "openai"
+	OpenAIBaseURL string
+	OpenAIKey     string
+	OpenAIModel   string
 }
 
 var AppConfig Config
@@ -32,6 +38,11 @@ func Load() {
 		OllamaURL:  getEnv("OLLAMA_URL", "http://localhost:11434"),
 		UploadDir:  getEnv("UPLOAD_DIR", "./data/uploads"),
 		CORSOrigin: getEnv("CORS_ORIGIN", "http://localhost:5173"),
+
+		LLMProvider:   getEnv("LLM_PROVIDER", "ollama"),
+		OpenAIBaseURL: getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+		OpenAIKey:     getEnv("OPENAI_API_KEY", ""),
+		OpenAIModel:   getEnv("OPENAI_MODEL", "gpt-4o-mini"),
 	}
 
 	// Ensure upload directory exists

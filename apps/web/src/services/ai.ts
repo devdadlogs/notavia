@@ -17,32 +17,84 @@ export const aiService = {
     return data;
   },
 
+  // Fetch SSE helper for streaming endpoints
+  fetchSSE: async (endpoint: string, payload: any, onChunk: (text: string) => void): Promise<string> => {
+    const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+    const response = await fetch(`${baseURL}${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`AI error (${response.status}): ${errText}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) return '';
+    const decoder = new TextDecoder();
+    let fullText = '';
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop() || '';
+
+      for (const part of parts) {
+        if (part.includes('event: error')) {
+          const dataLine = part.split('\n').find(l => l.startsWith('data: '));
+          throw new Error(dataLine ? dataLine.slice(6) : 'AI Streaming Error');
+        }
+        if (part.includes('event: message')) {
+          const dataLines = part.split('\n').filter(l => l.startsWith('data: '));
+          if (dataLines.length > 0) {
+            const chunk = dataLines.map(l => l.slice(6)).join('\n');
+            fullText += chunk;
+            onChunk(fullText);
+          }
+        }
+      }
+    }
+    return fullText;
+  },
+
   // Summarize a note (brief or detailed)
-  summarize: async (noteId: string, mode: 'brief' | 'detailed' = 'brief'): Promise<string> => {
+  summarize: async (noteId: string, mode: 'brief' | 'detailed' = 'brief', onChunk?: (text: string) => void): Promise<string> => {
+    if (onChunk) return aiService.fetchSSE('/ai/summarize', { noteId, mode }, onChunk);
     const { data } = await api.post<AIResult>('/ai/summarize', { noteId, mode });
     return data.result;
   },
 
   // Extract key points from a note
-  extractKeyPoints: async (noteId: string): Promise<string> => {
+  extractKeyPoints: async (noteId: string, onChunk?: (text: string) => void): Promise<string> => {
+    if (onChunk) return aiService.fetchSSE('/ai/extract', { noteId }, onChunk);
     const { data } = await api.post<AIResult>('/ai/extract', { noteId });
     return data.result;
   },
 
   // Continue writing from content
-  continueWriting: async (content: string): Promise<string> => {
+  continueWriting: async (content: string, onChunk?: (text: string) => void): Promise<string> => {
+    if (onChunk) return aiService.fetchSSE('/ai/continue', { content }, onChunk);
     const { data } = await api.post<AIResult>('/ai/continue', { content });
     return data.result;
   },
 
   // Rewrite content in a style
-  rewrite: async (content: string, style: 'formal' | 'casual' | 'concise' = 'formal'): Promise<string> => {
+  rewrite: async (content: string, style: 'formal' | 'casual' | 'concise' = 'formal', onChunk?: (text: string) => void): Promise<string> => {
+    if (onChunk) return aiService.fetchSSE('/ai/rewrite', { content, style }, onChunk);
     const { data } = await api.post<AIResult>('/ai/rewrite', { content, style });
     return data.result;
   },
 
   // Suggest tags for a note
-  suggestTags: async (noteId: string): Promise<string> => {
+  suggestTags: async (noteId: string, onChunk?: (text: string) => void): Promise<string> => {
+    if (onChunk) return aiService.fetchSSE('/ai/suggest-tags', { noteId }, onChunk);
     const { data } = await api.post<AIResult>('/ai/suggest-tags', { noteId });
     return data.result;
   },

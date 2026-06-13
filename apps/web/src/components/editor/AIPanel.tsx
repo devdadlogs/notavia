@@ -37,33 +37,40 @@ export default function AIPanel({ noteId, editorText, onInsertText, onClose }: A
     setActiveAction(action);
 
     try {
+      const onChunk = (text: string) => {
+        setResult(text);
+        setIsLoading(false); // Stop the spinner once streaming starts
+      };
+
       let res = '';
       switch (action) {
         case 'summarize-brief':
-          res = await aiService.summarize(noteId, 'brief');
+          res = await aiService.summarize(noteId, 'brief', onChunk);
           break;
         case 'summarize-detailed':
-          res = await aiService.summarize(noteId, 'detailed');
+          res = await aiService.summarize(noteId, 'detailed', onChunk);
           break;
         case 'extract':
-          res = await aiService.extractKeyPoints(noteId);
+          res = await aiService.extractKeyPoints(noteId, onChunk);
           break;
         case 'continue':
-          res = await aiService.continueWriting(editorText);
+          res = await aiService.continueWriting(editorText, onChunk);
           break;
         case 'rewrite-formal':
-          res = await aiService.rewrite(editorText, 'formal');
+          res = await aiService.rewrite(editorText, 'formal', onChunk);
           break;
         case 'rewrite-casual':
-          res = await aiService.rewrite(editorText, 'casual');
+          res = await aiService.rewrite(editorText, 'casual', onChunk);
           break;
         case 'rewrite-concise':
-          res = await aiService.rewrite(editorText, 'concise');
+          res = await aiService.rewrite(editorText, 'concise', onChunk);
           break;
         case 'suggest-tags':
-          res = await aiService.suggestTags(noteId);
+          res = await aiService.suggestTags(noteId, onChunk);
           break;
       }
+      // setResult(res) is already handled by onChunk, but just in case it wasn't streaming:
+      if (!res && result) res = result; 
       setResult(res);
     } catch (err: any) {
       setResult(`❌ AI 处理失败: ${err.response?.data?.error || err.message}`);

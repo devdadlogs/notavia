@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -12,14 +13,46 @@ import (
 	"github.com/google/uuid"
 )
 
-var ollamaService *services.OllamaService
+// --- Helper for Streaming ---
+func streamResponse(c *gin.Context, outChan <-chan string, errChan <-chan error) {
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+
+	c.Stream(func(w io.Writer) bool {
+		select {
+		case msg, ok := <-outChan:
+			if !ok {
+				return false // Channel closed, stream done
+			}
+			c.SSEvent("message", msg)
+			return true
+		case err, ok := <-errChan:
+			if ok && err != nil {
+				c.SSEvent("error", err.Error())
+			}
+			return false // End stream on error
+		}
+	})
+}
+
+var llmProvider services.LLMProvider
 var qdrantService *services.QdrantService
 
-func getOllamaService() *services.OllamaService {
-	if ollamaService == nil {
-		ollamaService = services.NewOllamaService()
+func getLLMProvider() services.LLMProvider {
+	if llmProvider == nil {
+		if config.AppConfig.LLMProvider == "openai" {
+			llmProvider = services.NewOpenAIProvider(
+				config.AppConfig.OpenAIBaseURL,
+				config.AppConfig.OpenAIKey,
+				config.AppConfig.OpenAIModel,
+			)
+		} else {
+			// Defaulting to Ollama for local setup.
+			llmProvider = services.NewOllamaService()
+		}
 	}
-	return ollamaService
+	return llmProvider
 }
 
 func getQdrantService() *services.QdrantService {
@@ -62,9 +95,9 @@ type SproutInput struct {
 
 // --- Handlers ---
 
-// AIHealthCheck returns the status of the Ollama connection and available models.
+// AIHealthCheck returns the status of the AI provider and available models.
 func AIHealthCheck(c *gin.Context) {
-	healthy, err := getOllamaService().CheckHealth()
+	healthy, err := getLLMProvider().CheckHealth()
 	if err != nil || !healthy {
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"status": "offline",
@@ -73,15 +106,11 @@ func AIHealthCheck(c *gin.Context) {
 		return
 	}
 
-	models, _ := getOllamaService().ListModels()
-	modelNames := make([]string, len(models))
-	for i, m := range models {
-		modelNames[i] = m.Name
-	}
+	models, _ := getLLMProvider().ListModels()
 
 	c.JSON(http.StatusOK, gin.H{
 		"status": "online",
-		"models": modelNames,
+		"models": models,
 	})
 }
 
@@ -106,16 +135,13 @@ func AISummarize(c *gin.Context) {
 		return
 	}
 
-	result, err := getOllamaService().Summarize(note.ContentText, input.Mode)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "AI processing failed: " + err.Error()})
-		return
-	}
+	outChan := make(chan string)
+	errChan := make(chan error)
 
-	// Log AI usage
 	logAIUsage(userID, "summarize")
 
-	c.JSON(http.StatusOK, gin.H{"result": result})
+	go services.SummarizeStream(getLLMProvider(), note.ContentText, input.Mode, outChan, errChan)
+	streamResponse(c, outChan, errChan)
 }
 
 // AIExtract extracts key points from a note.
@@ -138,14 +164,13 @@ func AIExtract(c *gin.Context) {
 		return
 	}
 
-	result, err := getOllamaService().ExtractKeyPoints(note.ContentText)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "AI processing failed: " + err.Error()})
-		return
-	}
+	outChan := make(chan string)
+	errChan := make(chan error)
 
 	logAIUsage(userID, "extract")
-	c.JSON(http.StatusOK, gin.H{"result": result})
+
+	go services.ExtractKeyPointsStream(getLLMProvider(), note.ContentText, outChan, errChan)
+	streamResponse(c, outChan, errChan)
 }
 
 // AIContinue continues writing from the given content.
@@ -157,14 +182,13 @@ func AIContinue(c *gin.Context) {
 		return
 	}
 
-	result, err := getOllamaService().ContinueWriting(input.Content)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "AI processing failed: " + err.Error()})
-		return
-	}
+	outChan := make(chan string)
+	errChan := make(chan error)
 
 	logAIUsage(userID, "continue")
-	c.JSON(http.StatusOK, gin.H{"result": result})
+
+	go services.ContinueWritingStream(getLLMProvider(), input.Content, outChan, errChan)
+	streamResponse(c, outChan, errChan)
 }
 
 // AIRewrite rewrites content in a specified style.
@@ -176,14 +200,13 @@ func AIRewrite(c *gin.Context) {
 		return
 	}
 
-	result, err := getOllamaService().Rewrite(input.Content, input.Style)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "AI processing failed: " + err.Error()})
-		return
-	}
+	outChan := make(chan string)
+	errChan := make(chan error)
 
 	logAIUsage(userID, "rewrite")
-	c.JSON(http.StatusOK, gin.H{"result": result})
+
+	go services.RewriteStream(getLLMProvider(), input.Content, input.Style, outChan, errChan)
+	streamResponse(c, outChan, errChan)
 }
 
 // AISuggestTags suggests tags for a note.
@@ -206,14 +229,13 @@ func AISuggestTags(c *gin.Context) {
 		return
 	}
 
-	result, err := getOllamaService().SuggestTags(note.ContentText)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "AI processing failed: " + err.Error()})
-		return
-	}
+	outChan := make(chan string)
+	errChan := make(chan error)
 
 	logAIUsage(userID, "suggest_tags")
-	c.JSON(http.StatusOK, gin.H{"result": result})
+
+	go services.SuggestTagsStream(getLLMProvider(), note.ContentText, outChan, errChan)
+	streamResponse(c, outChan, errChan)
 }
 
 // AISprout performs a semantic search to find related notes.
@@ -226,7 +248,7 @@ func AISprout(c *gin.Context) {
 	}
 
 	// 1. Generate embedding for the input content
-	embedding, err := getOllamaService().Embed(input.Content)
+	embedding, err := getLLMProvider().Embed(input.Content)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate embedding: " + err.Error()})
 		return

@@ -61,7 +61,7 @@ func (s *OllamaService) CheckHealth() (bool, error) {
 }
 
 // ListModels returns available models from Ollama.
-func (s *OllamaService) ListModels() ([]OllamaModelInfo, error) {
+func (s *OllamaService) ListModels() ([]string, error) {
 	resp, err := http.Get(s.baseURL + "/api/tags")
 	if err != nil {
 		return nil, err
@@ -72,7 +72,12 @@ func (s *OllamaService) ListModels() ([]OllamaModelInfo, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
 	}
-	return result.Models, nil
+	
+	names := make([]string, len(result.Models))
+	for i, m := range result.Models {
+		names[i] = m.Name
+	}
+	return names, nil
 }
 
 // EnsureModel pulls the default model if it's not already available.
@@ -82,9 +87,9 @@ func (s *OllamaService) EnsureModel() error {
 		return fmt.Errorf("ollama not reachable: %w", err)
 	}
 
-	for _, m := range models {
-		if strings.HasPrefix(m.Name, strings.Split(s.model, ":")[0]) {
-			fmt.Printf("✅ AI model '%s' already available\n", m.Name)
+	for _, name := range models {
+		if strings.HasPrefix(name, strings.Split(s.model, ":")[0]) {
+			fmt.Printf("✅ AI model '%s' already available\n", name)
 			return nil
 		}
 	}
@@ -144,81 +149,53 @@ func (s *OllamaService) Generate(prompt string) (string, error) {
 	return strings.TrimSpace(result.Response), nil
 }
 
-// Summarize generates a summary for the given note content.
-func (s *OllamaService) Summarize(content string, mode string) (string, error) {
-	var prompt string
-	switch mode {
-	case "brief":
-		prompt = fmt.Sprintf(`请用三句话简洁地总结以下笔记内容。只输出总结，不要添加任何前缀或解释。
+// GenerateStream sends a prompt to Ollama and streams the response back via a channel.
+func (s *OllamaService) GenerateStream(prompt string, outChan chan<- string, errChan chan<- error) {
+	defer close(outChan)
 
-笔记内容：
-%s`, content)
-	default: // "detailed"
-		prompt = fmt.Sprintf(`请详细总结以下笔记内容，包含核心要点和关键信息。使用清晰的结构化格式。只输出总结。
-
-笔记内容：
-%s`, content)
-	}
-	return s.Generate(prompt)
-}
-
-// ExtractKeyPoints extracts key points, action items, and decisions from the note.
-func (s *OllamaService) ExtractKeyPoints(content string) (string, error) {
-	prompt := fmt.Sprintf(`从以下笔记内容中提取关键信息，按以下分类输出：
-
-1. **核心观点**：主要论点和结论
-2. **待办事项**：需要跟进的行动项
-3. **关键数据**：重要的数字和指标
-4. **决策项**：已做出或需要做出的决策
-
-如果某个分类没有内容，则跳过。直接输出结果，不要添加前缀。
-
-笔记内容：
-%s`, content)
-	return s.Generate(prompt)
-}
-
-// ContinueWriting continues writing from the given context.
-func (s *OllamaService) ContinueWriting(content string) (string, error) {
-	prompt := fmt.Sprintf(`请根据以下笔记内容的上下文和风格，自然地续写一到两段内容。直接输出续写内容，不要重复已有内容。
-
-已有内容：
-%s
-
-续写：`, content)
-	return s.Generate(prompt)
-}
-
-// Rewrite rewrites the content in the specified style.
-func (s *OllamaService) Rewrite(content string, style string) (string, error) {
-	var styleDesc string
-	switch style {
-	case "formal":
-		styleDesc = "正式、专业的风格"
-	case "casual":
-		styleDesc = "轻松、口语化的风格"
-	case "concise":
-		styleDesc = "简洁、精炼的风格，去除冗余"
-	default:
-		styleDesc = "更清晰、更流畅的风格"
+	reqBody := OllamaGenerateRequest{
+		Model:  s.model,
+		Prompt: prompt,
+		Stream: true,
+		Options: map[string]interface{}{
+			"temperature": 0.7,
+			"num_predict": 1024,
+		},
 	}
 
-	prompt := fmt.Sprintf(`请将以下内容改写为%s。保留核心含义，只输出改写后的内容。
+	body, _ := json.Marshal(reqBody)
+	resp, err := http.Post(s.baseURL+"/api/generate", "application/json", bytes.NewReader(body))
+	if err != nil {
+		errChan <- fmt.Errorf("ollama request failed: %w", err)
+		return
+	}
+	defer resp.Body.Close()
 
-原文：
-%s`, styleDesc, content)
-	return s.Generate(prompt)
-}
+	if resp.StatusCode != 200 {
+		b, _ := io.ReadAll(resp.Body)
+		errChan <- fmt.Errorf("ollama error (status %d): %s", resp.StatusCode, string(b))
+		return
+	}
 
-// SuggestTags suggests tags for the given note content.
-func (s *OllamaService) SuggestTags(content string) (string, error) {
-	prompt := fmt.Sprintf(`根据以下笔记内容，推荐 3-5 个简短的分类标签。每个标签用逗号分隔，不要添加序号或其他格式。
+	decoder := json.NewDecoder(resp.Body)
+	for {
+		var chunk OllamaGenerateResponse
+		if err := decoder.Decode(&chunk); err != nil {
+			if err == io.EOF {
+				break
+			}
+			errChan <- err
+			return
+		}
+		
+		if chunk.Response != "" {
+			outChan <- chunk.Response
+		}
 
-笔记内容：
-%s
-
-推荐标签：`, content)
-	return s.Generate(prompt)
+		if chunk.Done {
+			break
+		}
+	}
 }
 
 // OllamaEmbedRequest is the request body for Ollama /api/embed.

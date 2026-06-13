@@ -16,6 +16,7 @@ import { ChevronLeft, Gift, MoreVertical, Play, FastForward, Edit3, Sparkles, Me
 import { useUIStore } from '../../stores/uiStore';
 import AIPanel from '../../components/editor/AIPanel';
 import EditorToolbar from '../../components/editor/EditorToolbar';
+import { BlockHoverControls } from '../../components/editor/BlockHoverControls';
 import { aiService } from '../../services/ai';
 
 // Yjs Imports
@@ -411,6 +412,7 @@ export default function NoteDetail() {
           {activeTab === 'note' && (
             <div>
               <EditorToolbar editor={editor} noteTitle={title} />
+              <BlockHoverControls editor={editor} />
               <div style={{ padding: '0 10%' }}>
                 <EditorContent editor={editor} />
               </div>

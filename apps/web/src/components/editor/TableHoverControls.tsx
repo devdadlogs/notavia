@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Editor } from '@tiptap/react';
 import { Trash2, Plus, Copy, Grip } from 'lucide-react';
 import { TextSelection } from '@tiptap/pm/state';
+import { CellSelection } from '@tiptap/pm/tables';
 
 interface TableHoverControlsProps {
   editor: Editor | null;
@@ -194,15 +195,30 @@ export function TableHoverControls({ editor }: TableHoverControlsProps) {
     }
   };
 
-  const simulateBorderClick = (cell: HTMLElement, type: 'row' | 'col') => {
-    const rect = cell.getBoundingClientRect();
-    const clientX = type === 'row' ? rect.left + 2 : rect.left + rect.width / 2;
-    const clientY = type === 'col' ? rect.top + 2 : rect.top + rect.height / 2;
-    
-    const mousedown = new MouseEvent('mousedown', { clientX, clientY, bubbles: true, cancelable: true, view: window });
-    cell.dispatchEvent(mousedown);
-    const mouseup = new MouseEvent('mouseup', { clientX, clientY, bubbles: true, cancelable: true, view: window });
-    cell.dispatchEvent(mouseup);
+  const selectRowOrCol = (cell: HTMLElement, type: 'row' | 'col') => {
+    try {
+      const pos = editor.view.posAtDOM(cell, 0);
+      const $pos = editor.view.state.doc.resolve(pos);
+      
+      // $pos is inside the td/th. We need to find the node position of the td/th.
+      // A table cell is usually at depth - 1 (since $pos might be inside a paragraph inside the cell)
+      // We search up the resolved position to find the cell node.
+      let cellPos = pos;
+      for (let d = $pos.depth; d > 0; d--) {
+        if ($pos.node(d).type.name === 'tableCell' || $pos.node(d).type.name === 'tableHeader') {
+          cellPos = $pos.before(d);
+          break;
+        }
+      }
+
+      const $cellPos = editor.view.state.doc.resolve(cellPos);
+      const selection = type === 'row' ? CellSelection.rowSelection($cellPos) : CellSelection.colSelection($cellPos);
+      
+      editor.view.dispatch(editor.view.state.tr.setSelection(selection as any));
+      editor.view.focus();
+    } catch (e) {
+      console.error('[TableHover] selectRowOrCol error:', e);
+    }
   };
 
   const copyTable = () => {
@@ -272,7 +288,7 @@ export function TableHoverControls({ editor }: TableHoverControlsProps) {
       {hoverState && !isMenuOpen && (
         <>
           <div 
-            onClick={() => simulateBorderClick(hoverState.cell, hoverState.type)}
+            onClick={() => selectRowOrCol(hoverState.cell, hoverState.type)}
             style={{
               position: 'absolute',
               backgroundColor: '#8c8c8c',

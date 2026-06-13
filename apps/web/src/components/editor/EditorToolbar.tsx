@@ -229,6 +229,13 @@ function useFloatingMenu(editor: Editor | null) {
     }
     const sel = window.getSelection();
     if (!sel || sel.rangeCount === 0) { setPos(null); return; }
+    
+    // Hide standard floating menu if table cells are selected
+    if (editor.view.dom.querySelectorAll('.selectedCell').length > 0) {
+      setPos(null);
+      return;
+    }
+
     const range = sel.getRangeAt(0);
     const rect = range.getBoundingClientRect();
     if (rect.width === 0) { setPos(null); return; }
@@ -241,11 +248,54 @@ function useFloatingMenu(editor: Editor | null) {
     editor.on('focus', update);
     editor.on('blur', () => setPos(null));
     document.addEventListener('mouseup', update);
+    window.addEventListener('scroll', update, true);
     return () => {
       editor.off('selectionUpdate', update);
       editor.off('focus', update);
       editor.off('blur', () => setPos(null));
       document.removeEventListener('mouseup', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [editor, update]);
+
+  return pos;
+}
+
+// ---- Table Floating Menu ----
+function useTableFloatingMenu(editor: Editor | null) {
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  const update = useCallback(() => {
+    if (!editor) return;
+    
+    // Prosemirror-tables adds .selectedCell to selected table cells
+    const selectedCells = Array.from(editor.view.dom.querySelectorAll('.selectedCell'));
+    if (selectedCells.length > 0) {
+      const rects = selectedCells.map(c => c.getBoundingClientRect());
+      const top = Math.min(...rects.map(r => r.top));
+      const left = Math.min(...rects.map(r => r.left));
+      const right = Math.max(...rects.map(r => r.right));
+      const width = right - left;
+      
+      setPos({ top: top + window.scrollY - 52, left: left + width / 2 });
+    } else {
+      setPos(null);
+    }
+  }, [editor]);
+
+  useEffect(() => {
+    if (!editor) return;
+    editor.on('selectionUpdate', update);
+    editor.on('focus', update);
+    editor.on('blur', () => setTimeout(update, 100));
+    document.addEventListener('mouseup', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      editor.off('selectionUpdate', update);
+      editor.off('focus', update);
+      editor.off('blur', update);
+      document.removeEventListener('mouseup', update);
+      window.removeEventListener('scroll', update, true);
     };
   }, [editor, update]);
 
@@ -255,6 +305,7 @@ function useFloatingMenu(editor: Editor | null) {
 // ---- Main Toolbar Component ----
 export default function EditorToolbar({ editor, noteTitle }: ToolbarProps) {
   const floatingPos = useFloatingMenu(editor);
+  const tableFloatingPos = useTableFloatingMenu(editor);
   const [, setTick] = useState(0);
 
   // Force re-render on editor transactions (e.g., selection change, formatting change)
@@ -448,6 +499,75 @@ export default function EditorToolbar({ editor, noteTitle }: ToolbarProps) {
           </ToolbarBtn>
           <ToolbarBtn onClick={() => editor.chain().focus().setTextAlign('right').run()} active={editor.isActive({ textAlign: 'right' })} title="右对齐">
             <AlignRight size={14} />
+          </ToolbarBtn>
+        </div>
+      )}
+
+      {/* Table Selection Floating Toolbar */}
+      {tableFloatingPos && (
+        <div
+          onMouseDown={(e) => e.preventDefault()}
+          style={{
+            position: 'fixed',
+            top: tableFloatingPos.top,
+            left: tableFloatingPos.left,
+            transform: 'translateX(-50%)',
+            zIndex: 1000,
+            display: 'flex', alignItems: 'center', gap: '2px',
+            background: 'var(--bg-panel)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '8px', padding: '4px 6px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+          }}
+        >
+          <ToolbarBtn onClick={() => editor.chain().focus().mergeCells().run()} active={false} title="合并单元格" disabled={!editor.can().mergeCells()}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="5" width="18" height="14" rx="2" strokeDasharray="3 3" />
+              <path d="M9 12h6" />
+              <path d="M11 10l-2 2 2 2" />
+              <path d="M13 10l2 2-2 2" />
+            </svg>
+          </ToolbarBtn>
+          <ToolbarBtn onClick={() => editor.chain().focus().splitCell().run()} active={false} title="拆分单元格" disabled={!editor.can().splitCell()}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 7a2 2 0 0 1 2-2h4v14H5a2 2 0 0 1-2-2V7z" fill="currentColor" />
+              <path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9" />
+              <path d="M13 12h4" />
+              <path d="M15 10l2 2-2 2" />
+            </svg>
+          </ToolbarBtn>
+          <ToolbarSep />
+          <ToolbarBtn onClick={() => editor.chain().focus().setTextAlign('left').run()} active={editor.isActive({ textAlign: 'left' })} title="左对齐">
+            <AlignLeft size={14} />
+          </ToolbarBtn>
+          <ToolbarBtn onClick={() => editor.chain().focus().setTextAlign('center').run()} active={editor.isActive({ textAlign: 'center' })} title="居中">
+            <AlignCenter size={14} />
+          </ToolbarBtn>
+          <ToolbarBtn onClick={() => editor.chain().focus().setTextAlign('right').run()} active={editor.isActive({ textAlign: 'right' })} title="右对齐">
+            <AlignRight size={14} />
+          </ToolbarBtn>
+          <ToolbarSep />
+          <ToolbarBtn onClick={() => editor.chain().focus().toggleBold().run()} active={editor.isActive('bold')} title="加粗">
+            <Bold size={14} />
+          </ToolbarBtn>
+          <ToolbarBtn onClick={() => editor.chain().focus().toggleItalic().run()} active={editor.isActive('italic')} title="斜体">
+            <Italic size={14} />
+          </ToolbarBtn>
+          <ToolbarBtn onClick={() => editor.chain().focus().toggleUnderline().run()} active={editor.isActive('underline')} title="下划线">
+            <Underline size={14} />
+          </ToolbarBtn>
+          <ToolbarBtn onClick={() => editor.chain().focus().toggleStrike().run()} active={editor.isActive('strike')} title="删除线">
+            <Strikethrough size={14} />
+          </ToolbarBtn>
+          <ToolbarSep />
+          <ToolbarBtn onClick={() => editor.chain().focus().deleteTable().run()} active={false} title="删除表格">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ff4d4f" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6h18" />
+              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+              <line x1="10" y1="11" x2="10" y2="17" />
+              <line x1="14" y1="11" x2="14" y2="17" />
+            </svg>
           </ToolbarBtn>
         </div>
       )}

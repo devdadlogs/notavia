@@ -299,8 +299,16 @@ ul[data-type="taskList"] li > div {
   position: absolute;
   content: '';
   left: 0; right: 0; top: 0; bottom: 0;
-  background: rgba(var(--primary-rgb, 16,185,129), 0.12);
+  background: rgba(22, 119, 255, 0.12); /* Light blue background */
   pointer-events: none;
+}
+
+/* Hide text selection and caret when the entire cell is selected */
+.ProseMirror .selectedCell {
+  caret-color: transparent;
+}
+.ProseMirror .selectedCell *::selection {
+  background: transparent;
 }
 
 

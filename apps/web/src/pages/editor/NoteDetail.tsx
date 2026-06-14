@@ -49,6 +49,9 @@ export default function NoteDetail() {
   const [duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [showSaveToast, setShowSaveToast] = useState(false);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const [isRecording, setIsRecording] = useState(false);
   const [audioVolumes, setAudioVolumes] = useState([4, 4, 4, 4, 4]);
@@ -150,18 +153,9 @@ export default function NoteDetail() {
     }
   };
 
-  const handleSprout = async () => {
-    setActiveTab('sprout');
-    if (!editor || editor.getText().trim() === '') return;
-    setIsSprouting(true);
-    try {
-      const results = await aiService.sprout(id!, editor.getText());
-      setSproutResults(results);
-    } catch (err) {
-      console.error('Sprout failed', err);
-    } finally {
-      setIsSprouting(false);
-    }
+  const handleSprout = () => {
+    setActiveTab('note');
+    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
   };
 
   // 1. Initialize Yjs Document
@@ -291,7 +285,10 @@ export default function NoteDetail() {
     ],
     onUpdate: ({ editor }) => {
       // Debounced save to traditional DB for fallback/search
-      saveNoteContent(editor.getJSON(), editor.getText({ blockSeparator: '\n' }));
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = setTimeout(() => {
+        saveNoteContent(editor.getJSON(), editor.getText({ blockSeparator: '\n' }));
+      }, 1000); // 1-second debounce
     }
   });
 
@@ -306,6 +303,35 @@ export default function NoteDetail() {
     window.addEventListener('online', handleOnline);
     return () => window.removeEventListener('online', handleOnline);
   }, [editor, saveNote, title]);
+
+  // Auto-sprout effect (Semantic Bi-linking)
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || activeTab !== 'note') return;
+
+    try {
+      const text = editor.getText({ blockSeparator: '\n' });
+      if (text.length < 50) {
+        setSproutResults([]);
+        return;
+      }
+
+      const timer = setTimeout(async () => {
+        setIsSprouting(true);
+        try {
+          const results = await aiService.sprout(id!, text);
+          setSproutResults(results);
+        } catch (err) {
+          console.error('Auto sprout failed', err);
+        } finally {
+          setIsSprouting(false);
+        }
+      }, 2000); // 2 seconds of inactivity triggers semantic search
+
+      return () => clearTimeout(timer);
+    } catch (e) {
+      // Editor schema might not be fully initialized yet
+    }
+  }, [editor, editor?.state?.doc?.content?.size, activeTab, id]);
 
   // Load Note Metadata — only populate editor AFTER ALL Yjs providers sync
   useEffect(() => {
@@ -386,7 +412,37 @@ export default function NoteDetail() {
     }
   };
 
+  // Handle Cmd+S / Ctrl+S keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault(); // Prevent browser's "Save Page" dialog
+        if (editor && !editor.isDestroyed) {
+          saveNote(title, editor.getJSON(), editor.getText({ blockSeparator: '\n' }));
+          
+          // Show toast notification
+          setShowSaveToast(true);
+          setTimeout(() => setShowSaveToast(false), 2000);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [editor, saveNote, title]);
+
   if (!editor || !noteData) return <div style={{ padding: '40px', textAlign: 'center' }}>加载中...</div>;
+
+  // Deduplicate sprout results by noteId and apply a stricter similarity threshold (0.75)
+  const uniqueSprouts = sproutResults
+    .filter(r => r.score >= 0.75)
+    .reduce((acc: any[], current: any) => {
+      if (!acc.find(item => item.noteId === current.noteId)) {
+        acc.push(current);
+      }
+      return acc;
+    }, [])
+    .slice(0, 3);
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-panel)', position: 'relative' }}>
@@ -564,7 +620,6 @@ export default function NoteDetail() {
         <div className="note-tabs">
           <div className={`note-tab ${activeTab === 'transcript' ? 'active' : ''}`} onClick={() => setActiveTab('transcript')}>录音原文</div>
           <div className={`note-tab ${activeTab === 'note' ? 'active' : ''}`} onClick={() => setActiveTab('note')}>笔记内容</div>
-          <div className={`note-tab ${activeTab === 'sprout' ? 'active' : ''}`} onClick={handleSprout}>发芽</div>
           <div className={`note-tab ${activeTab === 'append' ? 'active' : ''}`} onClick={() => setActiveTab('append')}>追加笔记</div>
         </div>
 
@@ -578,40 +633,36 @@ export default function NoteDetail() {
               <div style={{ width: '100%' }}>
                 <EditorContent editor={editor} />
               </div>
-            </div>
-          )}
-          {activeTab === 'sprout' && (
-            <div style={{ padding: '24px 0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px', color: 'var(--accent-color)' }}>
-                <Sparkles size={20} />
-                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600 }}>语义关联发现</h3>
-                <span style={{ fontSize: '12px', color: 'var(--text-secondary)', marginLeft: '8px' }}>基于本地向量检索</span>
-              </div>
-              
-              {isSprouting ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 0', color: 'var(--text-secondary)' }}>
-                  <Loader2 size={32} style={{ animation: 'spin 1s linear infinite', marginBottom: '16px' }} />
-                  <div>正在搜索您的本地知识库...</div>
-                </div>
-              ) : sproutResults.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {sproutResults.map((result: any) => (
-                    <div key={result.noteId} className="card card-hoverable" style={{ cursor: 'pointer', borderLeft: '4px solid var(--accent-color)' }} onClick={() => navigate(`/n/${result.noteId}`)}>
-                      <h4 style={{ margin: '0 0 8px 0', fontSize: '15px' }}>{result.title || '无标题'}</h4>
-                      <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-secondary)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                        {result.content}
-                      </p>
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
-                        <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-color)', padding: '2px 6px', borderRadius: '4px' }}>
-                          相似度: {(result.score * 100).toFixed(1)}%
-                        </span>
-                      </div>
+              {/* Auto Sprout Recommendations (Smart Bi-linking) */}
+              {editor && editor.getText().length > 50 && (
+                <div className="fade-in" style={{ marginTop: '64px', paddingTop: '32px', borderTop: '1px dashed var(--border-color)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', color: 'var(--text-tertiary)' }}>
+                    <Sparkles size={16} />
+                    <span style={{ fontSize: '13px', fontWeight: 500 }}>智能关联推荐 (Smart Bi-linking)</span>
+                  </div>
+                  {isSprouting ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-tertiary)', fontSize: '13px' }}>
+                      <Loader2 size={14} className="spin" /> 正在思考...
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: '60px 0' }}>
-                  没有找到语义相关的笔记
+                  ) : uniqueSprouts.length > 0 ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+                      {uniqueSprouts.map((result: any) => (
+                        <div key={result.noteId} className="card card-hoverable" style={{ padding: '16px', cursor: 'pointer', borderTop: '3px solid var(--accent-light)', backgroundColor: 'var(--bg-input)' }} onClick={() => navigate(`/n/${result.noteId}`)}>
+                          <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: 'var(--text-primary)' }}>{result.title || '无标题'}</h4>
+                          <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                            {result.content.replace(/【笔记标题：.*?】\n/, '')}
+                          </p>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
+                            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-color)', padding: '2px 6px', borderRadius: '4px' }}>
+                              相关度: {(result.score * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>暂无高度相关的笔记</div>
+                  )}
                 </div>
               )}
             </div>
@@ -750,6 +801,20 @@ export default function NoteDetail() {
         isOpen={showAIPanel}
       />
 
+      {/* Toast Notification for manual save */}
+      {showSaveToast && (
+        <div style={{
+          position: 'fixed', top: '40px', left: '50%', transform: 'translateX(-50%)',
+          backgroundColor: 'var(--bg-panel)', color: 'var(--text-primary)',
+          padding: '12px 24px', borderRadius: '30px', zIndex: 9999,
+          boxShadow: '0 10px 40px rgba(0,0,0,0.1)', border: '1px solid var(--border-color)',
+          display: 'flex', alignItems: 'center', gap: '8px',
+          animation: 'fade-in 0.3s ease-out'
+        }}>
+          <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981', boxShadow: '0 0 8px #10b981' }} />
+          <span style={{ fontSize: '14px', fontWeight: 500 }}>内容已成功保存</span>
+        </div>
+      )}
     </div>
   );
 }

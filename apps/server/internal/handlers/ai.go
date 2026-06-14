@@ -286,6 +286,12 @@ func AISprout(c *gin.Context) {
 		return
 	}
 
+	// Safely truncate to avoid context window overflow in the embedding model (Ollama default num_ctx is often 2048)
+	runes := []rune(input.Content)
+	if len(runes) > 1000 {
+		input.Content = string(runes[len(runes)-1000:]) // Take the latest 1000 characters
+	}
+
 	// 1. Generate embedding for the input content (Always use local)
 	embedding, err := getEmbeddingProvider().Embed(input.Content)
 	if err != nil {

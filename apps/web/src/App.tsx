@@ -45,7 +45,7 @@ function App() {
         element={isAuthenticated ? <MainLayout /> : <Navigate to="/auth/login" />} 
       >
         <Route index element={<Dashboard />} />
-        <Route path="n/:id" element={<NoteDetail />} />
+        <Route path="n/:id" element={<NoteDetail key={location.pathname} />} />
         <Route path="calendar" element={<CalendarPage />} />
         <Route path="daily" element={<DailyReport />} />
         <Route path="report" element={<SproutReport />} />

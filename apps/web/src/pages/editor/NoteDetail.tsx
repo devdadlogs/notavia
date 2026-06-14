@@ -295,6 +295,18 @@ export default function NoteDetail() {
     }
   });
 
+  // Handle offline/online transitions to flush offline edits to DB
+  useEffect(() => {
+    const handleOnline = () => {
+      if (editor && !editor.isDestroyed) {
+        saveNote(title, editor.getJSON(), editor.getText({ blockSeparator: '\n' }));
+      }
+    };
+    
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [editor, saveNote, title]);
+
   // Load Note Metadata — only populate editor AFTER ALL Yjs providers sync
   useEffect(() => {
     const loadNote = async () => {
@@ -393,7 +405,24 @@ export default function NoteDetail() {
             <ChevronLeft size={20} color="var(--text-primary)" />
           </button>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          {/* Corner Sync Indicator */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            padding: '4px 10px', borderRadius: '20px',
+            backgroundColor: syncState === 'offline' ? '#fee2e2' : (isSaving ? '#fef3c7' : 'var(--accent-light)'),
+            color: syncState === 'offline' ? '#dc2626' : (isSaving ? '#d97706' : '#059669'),
+            fontSize: '12px', fontWeight: 500, marginRight: '8px',
+            transition: 'all 0.3s ease'
+          }}>
+            <div style={{
+              width: '8px', height: '8px', borderRadius: '50%',
+              backgroundColor: syncState === 'offline' ? '#ef4444' : (isSaving ? '#f59e0b' : '#10b981'),
+              boxShadow: isSaving ? '0 0 8px #f59e0b' : 'none'
+            }} />
+            {syncState === 'offline' ? '🔴 离线记录中' : (isSaving ? '🟡 同步中' : '🟢 已同步')}
+          </div>
+
           <button style={{ background: 'var(--bg-input)', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <Gift size={16} color="var(--text-secondary)" />
           </button>
@@ -427,17 +456,7 @@ export default function NoteDetail() {
             <span>创建时间 {new Date(noteData.createdAt).toLocaleString('zh-CN')}</span>
             <span style={{ color: 'var(--text-tertiary)' }}>{isSaving ? '保存中...' : '已保存'}</span>
             
-            {/* Sync State Indicator */}
-            <div style={{ 
-              display: 'flex', alignItems: 'center', gap: '4px', 
-              fontSize: '11px', padding: '2px 8px', borderRadius: '4px',
-              backgroundColor: syncState === 'connected' ? 'var(--accent-light)' : '#fee2e2',
-              color: syncState === 'connected' ? '#059669' : '#dc2626',
-              fontWeight: 500
-            }}>
-              {syncState === 'connected' ? <Wifi size={12} /> : <WifiOff size={12} />}
-              {syncState === 'connected' ? '实时协同已连接' : '离线 (本地保存)'}
-            </div>
+            {/* Sync State Indicator (Moved to top right header) */}
           </div>
           <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
             <span className="btn btn-outline text-xs" style={{ padding: '2px 8px' }}>+</span>

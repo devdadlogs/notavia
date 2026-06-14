@@ -445,12 +445,17 @@ export default function Dashboard() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {notes.map(note => (
               <div key={note.id} className="card card-hoverable" style={{ padding: '24px', cursor: 'pointer' }} onClick={() => navigate(`/n/${note.id}`)}>
-                <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '12px' }}>{note.title || '无标题笔记'}</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                  <h3 style={{ fontSize: '18px', fontWeight: 600, margin: 0 }}>{note.title || '无标题笔记'}</h3>
+                  {note.audioUrl && (
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e0e7ff', color: '#4f46e5', borderRadius: '50%', width: '24px', height: '24px' }}>
+                      <Mic size={14} />
+                    </span>
+                  )}
+                </div>
                 <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '16px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                   {(note.contentText || '点击此处开始记录你的灵感和想法...').replace(/#{1,6}\s?/g, '').replace(/\*\*/g, '').replace(/[-*]\s/g, '').replace(/\n/g, ' ')}
                 </p>
-                
-
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>

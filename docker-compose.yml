@@ -66,7 +66,7 @@ services:
     ports:
       - "9005:9000"
     environment:
-      - ASR_MODEL=base # Options: tiny, base, small, medium, large
+      - ASR_MODEL=small # Options: tiny, base, small, medium, large
       - ASR_ENGINE=openai_whisper
     volumes:
       - whisper_data:/root/.cache/whisper

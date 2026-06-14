@@ -33,6 +33,7 @@ type UpdateNoteInput struct {
 	Icon        *string `json:"icon"`
 	IsPinned    *bool   `json:"isPinned"`
 	IsTrashed   *bool   `json:"isTrashed"`
+	Transcript  *string `json:"transcript"`
 }
 
 // --- Handlers ---
@@ -160,6 +161,9 @@ func UpdateNote(c *gin.Context) {
 	}
 	if input.IsTrashed != nil {
 		updates["is_trashed"] = *input.IsTrashed
+	}
+	if input.Transcript != nil {
+		updates["transcript"] = *input.Transcript
 	}
 
 	// Auto-increment version

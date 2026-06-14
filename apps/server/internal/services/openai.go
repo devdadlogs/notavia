@@ -298,7 +298,8 @@ func (p *OpenAIProvider) TranscribeAudio(filePath string) (string, error) {
 		if !strings.HasSuffix(base, "/asr") {
 			base += "/asr"
 		}
-		endpoint = base + "?output=json"
+		// Request VTT output and force Chinese language via query params for local ASR
+		endpoint = base + "?output=vtt&language=zh"
 	}
 
 	part, err := writer.CreateFormFile(fileField, filepath.Base(filePath))
@@ -310,6 +311,19 @@ func (p *OpenAIProvider) TranscribeAudio(filePath string) (string, error) {
 	}
 	// model is optional for local whisper, but required for openai
 	if err := writer.WriteField("model", p.model); err != nil {
+		return "", err
+	}
+	// Force language and response_format for OpenAI-compatible endpoints
+	if err := writer.WriteField("language", "zh"); err != nil {
+		return "", err
+	}
+	if err := writer.WriteField("response_format", "vtt"); err != nil {
+		return "", err
+	}
+	
+	// Add initial prompt to improve accuracy and punctuation for Chinese
+	prompt := "以下是一段会议记录，请使用简体中文、准确的标点符号进行转写。"
+	if err := writer.WriteField("prompt", prompt); err != nil {
 		return "", err
 	}
 	writer.Close()
@@ -327,17 +341,74 @@ func (p *OpenAIProvider) TranscribeAudio(filePath string) (string, error) {
 	}
 	defer resp.Body.Close()
 
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
 		return "", fmt.Errorf("transcription failed with status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
+	// Since we requested VTT, the response is plain text, not JSON.
+	// For fallback, if a provider ignored the format and returned JSON {"text": "..."}, try parsing it.
 	var result struct {
 		Text string `json:"text"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
+	if err := json.Unmarshal(bodyBytes, &result); err == nil && result.Text != "" {
+		return result.Text, nil
 	}
 
-	return result.Text, nil
+	// Otherwise return the raw VTT text
+	rawVtt := string(bodyBytes)
+	return formatVTT(rawVtt), nil
+}
+
+func formatVTT(vtt string) string {
+	lines := strings.Split(vtt, "\n")
+	var result []string
+	var currentTimestamp string
+	var currentText []string
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "WEBVTT" {
+			continue
+		}
+		if strings.Contains(line, "-->") {
+			// If we had a previous block, save it
+			if currentTimestamp != "" && len(currentText) > 0 {
+				result = append(result, currentTimestamp+" "+strings.Join(currentText, " "))
+				currentText = nil
+			}
+			// simplify the timestamp and format it as [00:00.000 - 00:05.400]
+			currentTimestamp = "[" + strings.ReplaceAll(line, "-->", "-") + "]"
+		} else if line == "" {
+			// End of block
+			if currentTimestamp != "" && len(currentText) > 0 {
+				result = append(result, currentTimestamp+" "+strings.Join(currentText, " "))
+				currentTimestamp = ""
+				currentText = nil
+			}
+		} else if currentTimestamp != "" {
+			currentText = append(currentText, line)
+		} else {
+			// Handle cases where there is no timestamp but just text (like the JSON fallback)
+			if line != "" {
+				currentText = append(currentText, line)
+			}
+		}
+	}
+	// Flush last block
+	if currentTimestamp != "" && len(currentText) > 0 {
+		result = append(result, currentTimestamp+" "+strings.Join(currentText, " "))
+	} else if currentTimestamp == "" && len(currentText) > 0 {
+		result = append(result, strings.Join(currentText, " "))
+	}
+
+	if len(result) == 0 {
+		return vtt // return original if parsing failed
+	}
+	
+	return strings.Join(result, "\n\n")
 }

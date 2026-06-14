@@ -40,6 +40,8 @@ export default function NoteDetail() {
   const [syncState, setSyncState] = useState<'connecting' | 'connected' | 'offline'>('connecting');
   const [sproutResults, setSproutResults] = useState<any[]>([]);
   const [isSprouting, setIsSprouting] = useState(false);
+  const [isEditingTranscript, setIsEditingTranscript] = useState(false);
+  const [editTranscriptText, setEditTranscriptText] = useState("");
   
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -405,13 +407,21 @@ export default function NoteDetail() {
         
         {/* Note Header Info */}
         <div className="note-header-layout">
-          <input 
-            type="text" 
-            className="note-title-input" 
-            placeholder="无标题笔记" 
-            value={title} 
-            onChange={handleTitleChange}
-          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {noteData?.audioUrl && (
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e0e7ff', color: '#4f46e5', borderRadius: '50%', width: '32px', height: '32px', flexShrink: 0 }}>
+                <Mic size={18} />
+              </span>
+            )}
+            <input 
+              type="text" 
+              className="note-title-input" 
+              placeholder="无标题笔记" 
+              value={title} 
+              onChange={handleTitleChange}
+              style={{ flex: 1 }}
+            />
+          </div>
           <div className="note-meta-row" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <span>创建时间 {new Date(noteData.createdAt).toLocaleString('zh-CN')}</span>
             <span style={{ color: 'var(--text-tertiary)' }}>{isSaving ? '保存中...' : '已保存'}</span>
@@ -596,7 +606,58 @@ export default function NoteDetail() {
                       <p style={{ color: 'var(--text-secondary)' }}>{noteData.transcriptSummary}</p>
                     </div>
                   )}
-                  <div style={{ whiteSpace: 'pre-wrap' }}>{noteData.transcript}</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <p style={{ margin: 0, fontWeight: 600 }}>录音原文：</p>
+                    {!isEditingTranscript && (
+                      <button className="btn btn-outline" style={{ padding: '4px 12px', fontSize: '13px' }} onClick={() => {
+                        setEditTranscriptText(noteData.transcript);
+                        setIsEditingTranscript(true);
+                      }}>
+                        <Edit3 size={14} style={{ marginRight: '4px' }} /> 编辑原文
+                      </button>
+                    )}
+                  </div>
+                  {isEditingTranscript ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <textarea 
+                        value={editTranscriptText}
+                        onChange={(e) => setEditTranscriptText(e.target.value)}
+                        style={{ 
+                          width: '100%', 
+                          minHeight: '400px', 
+                          padding: '16px', 
+                          backgroundColor: '#fff', 
+                          border: '1px solid var(--accent-color)', 
+                          borderRadius: '12px', 
+                          fontSize: '14px', 
+                          lineHeight: '1.8', 
+                          color: 'var(--text-primary)', 
+                          resize: 'vertical', 
+                          outline: 'none', 
+                          fontFamily: 'inherit',
+                          boxShadow: '0 0 0 2px rgba(79, 70, 229, 0.1)'
+                        }} 
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                        <button className="btn btn-outline" onClick={() => setIsEditingTranscript(false)}>取消</button>
+                        <button className="btn btn-primary" onClick={async () => {
+                          if (editTranscriptText !== noteData.transcript) {
+                            try {
+                              await api.put(`/notes/${id}`, { transcript: editTranscriptText });
+                              setNoteData((prev: any) => ({ ...prev, transcript: editTranscriptText }));
+                            } catch (err) {
+                              console.error('Failed to update transcript', err);
+                            }
+                          }
+                          setIsEditingTranscript(false);
+                        }}>保存修改</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.8', padding: '16px', backgroundColor: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '12px', fontSize: '14px' }}>
+                      {noteData.transcript}
+                    </div>
+                  )}
                 </div>
               ) : noteData?.audioUrl ? (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 0', gap: '16px', color: 'var(--text-secondary)' }}>

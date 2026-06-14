@@ -184,15 +184,23 @@ func UpdateNote(c *gin.Context) {
 	// Return fresh copy
 	config.DB.First(&note, "id = ?", noteID)
 
-	// Update vector DB with text and transcript
-	indexText := note.ContentText
-	if note.Transcript != "" {
-		indexText += "\n\n录音内容:\n" + note.Transcript
+	// Update vector DB
+	if note.IsTrashed {
+		go func() {
+			if err := getQdrantService().DeleteNotesByNoteID(note.ID); err != nil {
+				fmt.Printf("Failed to delete points for trashed note %s: %v\n", note.ID, err)
+			}
+		}()
+	} else {
+		indexText := note.ContentText
+		if note.Transcript != "" {
+			indexText += "\n\n录音内容:\n" + note.Transcript
+		}
+		if note.TranscriptSummary != "" {
+			indexText += "\n\n录音摘要:\n" + note.TranscriptSummary
+		}
+		go indexNoteInVectorDB(userID, note.ID, note.Title, indexText)
 	}
-	if note.TranscriptSummary != "" {
-		indexText += "\n\n录音摘要:\n" + note.TranscriptSummary
-	}
-	go indexNoteInVectorDB(userID, note.ID, note.Title, indexText)
 
 	c.JSON(http.StatusOK, note)
 }
@@ -209,6 +217,13 @@ func TrashNote(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Note not found"})
 		return
 	}
+
+	// Delete from vector db when trashed
+	go func() {
+		if err := getQdrantService().DeleteNotesByNoteID(noteID); err != nil {
+			fmt.Printf("Failed to delete points from vector db for trashed note %s: %v\n", noteID, err)
+		}
+	}()
 
 	c.JSON(http.StatusOK, gin.H{"message": "Note trashed"})
 }
@@ -490,7 +505,7 @@ func indexNoteInVectorDB(userID, noteID, title, contentText string) {
 		if end > len(runes) {
 			end = len(runes)
 		}
-		chunkText := string(runes[i:end])
+		chunkText := fmt.Sprintf("【笔记标题：%s】\n%s", title, string(runes[i:end]))
 		chunks = append(chunks, chunkText)
 		
 		embedding, err := getEmbeddingProvider().Embed(chunkText)

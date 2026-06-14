@@ -92,7 +92,7 @@ type NoteTag struct {
 	AssignedAt time.Time `json:"assignedAt" gorm:"autoCreateTime"`
 
 	Note Note `json:"-" gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"`
-	Tag  Tag  `json:"-" gorm:"foreignKey:TagID;constraint:OnDelete:CASCADE"`
+	Tag  Tag  `json:"tag,omitempty" gorm:"foreignKey:TagID;constraint:OnDelete:CASCADE"`
 }
 
 type AiUsageLog struct {

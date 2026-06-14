@@ -329,9 +329,9 @@ export default function NoteDetail() {
           </div>
           <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
             <span className="btn btn-outline text-xs" style={{ padding: '2px 8px' }}>+</span>
-            <span className="note-tag">录音笔记</span>
-            <span className="note-tag">大模型选型</span>
-            <span className="note-tag">产品构想</span>
+            {noteData.tags && noteData.tags.map((t: any) => (
+              <span key={t.tagId || t.id} className="note-tag">{t.tag?.name || t.name || '标签'}</span>
+            ))}
           </div>
 
           {/* Audio Player */}

@@ -63,6 +63,8 @@ type Note struct {
 	CoverImage  string    `json:"coverImage"`
 	Icon        string    `json:"icon"`
 	AudioURL    string    `json:"audioUrl"`
+	Transcript  string    `json:"transcript" gorm:"type:text"`
+	TranscriptSummary string `json:"transcriptSummary" gorm:"type:text"`
 	WordCount   int       `json:"wordCount" gorm:"default:0"`
 	IsPinned    bool      `json:"isPinned" gorm:"default:false"`
 	IsTrashed   bool      `json:"isTrashed" gorm:"default:false"`

@@ -12,7 +12,7 @@ import { ResizableImage } from '../../components/editor/extensions/ResizableImag
 import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
 import { Markdown } from 'tiptap-markdown';
 import api from '../../services/api';
-import { ChevronLeft, Gift, MoreVertical, Play, FastForward, Edit3, Sparkles, MessageSquarePlus, Menu, Wifi, WifiOff, Loader2, Pause, Volume2 } from 'lucide-react';
+import { ChevronLeft, Gift, MoreVertical, Play, FastForward, Edit3, Sparkles, MessageSquarePlus, Menu, Wifi, WifiOff, Loader2, Pause, Volume2, Mic } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
 import AIPanel from '../../components/editor/AIPanel';
 import EditorToolbar from '../../components/editor/EditorToolbar';
@@ -47,6 +47,86 @@ export default function NoteDetail() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioVolumes, setAudioVolumes] = useState([4, 4, 4, 4, 4]);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorderRef.current = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      mediaRecorderRef.current.ondataavailable = e => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      // Set up AudioContext for real-time visualization
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioContextRef.current = audioContext;
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const updateWaveform = () => {
+        analyser.getByteFrequencyData(dataArray);
+        const step = Math.floor(dataArray.length / 5);
+        const newVolumes = [];
+        for (let i = 0; i < 5; i++) {
+          let sum = 0;
+          for (let j = 0; j < step; j++) {
+            sum += dataArray[i * step + j];
+          }
+          const avg = sum / step;
+          let height = Math.max(4, (avg / 255) * 16);
+          newVolumes.push(height);
+        }
+        setAudioVolumes(newVolumes);
+        animationFrameRef.current = requestAnimationFrame(updateWaveform);
+      };
+      updateWaveform();
+
+      mediaRecorderRef.current.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const file = new File([audioBlob], 'recording.webm', { type: 'audio/webm' });
+        
+        // upload using existing endpoint
+        const formData = new FormData();
+        formData.append('audio', file);
+        try {
+          const { data } = await api.post(`/notes/${id}/audio`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          setNoteData((prev: any) => prev ? { ...prev, audioUrl: data.audioUrl } : null);
+        } catch (err) {
+          console.error('Audio upload failed', err);
+        }
+      };
+      
+      mediaRecorderRef.current.start();
+      setIsRecording(true);
+    } catch (err) {
+      alert('无法访问麦克风，请检查权限');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      setIsRecording(false);
+      
+      // Cleanup audio context
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      if (audioContextRef.current) audioContextRef.current.close();
+      setAudioVolumes([4, 4, 4, 4, 4]);
+    }
+  };
+
   // Guard flag: prevent content from being loaded from DB more than once per note open
   const contentLoadedRef = useRef(false);
 
@@ -58,7 +138,9 @@ export default function NoteDetail() {
     formData.append('audio', file);
 
     try {
-      const { data } = await api.post(`/notes/${id}/audio`, formData);
+      const { data } = await api.post(`/notes/${id}/audio`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
       setNoteData(prev => prev ? { ...prev, audioUrl: data.audioUrl } : null);
     } catch (err) {
       console.error('Audio upload failed', err);
@@ -250,6 +332,25 @@ export default function NoteDetail() {
     if (id && editor && yjsSynced) loadNote();
   }, [id, editor, yjsSynced]);
 
+  // Polling for transcript completion
+  useEffect(() => {
+    if (!id || !noteData?.audioUrl || noteData?.transcript) return;
+    
+    const intervalId = setInterval(async () => {
+      try {
+        const { data } = await api.get(`/notes/${id}`);
+        if (data.transcript) {
+          setNoteData(data);
+          clearInterval(intervalId);
+        }
+      } catch (err) {
+        console.error("Polling transcript failed", err);
+      }
+    }, 3000);
+
+    return () => clearInterval(intervalId);
+  }, [id, noteData?.audioUrl, noteData?.transcript]);
+
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTitle = e.target.value;
     setTitle(newTitle);
@@ -334,7 +435,7 @@ export default function NoteDetail() {
             ))}
           </div>
 
-          {/* Audio Player */}
+          {/* Audio Player Area */}
           <div style={{ display: 'flex', alignItems: 'center', backgroundColor: 'var(--bg-input)', padding: '16px 24px', borderRadius: 'var(--radius-pill)', gap: '24px' }}>
             <input 
               type="file" 
@@ -344,69 +445,88 @@ export default function NoteDetail() {
               onChange={handleAudioUpload} 
             />
             
-            <audio 
-              ref={audioRef}
-              src={noteData?.audioUrl ? `http://localhost:3001${noteData.audioUrl}` : undefined}
-              onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
-              onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
-              onEnded={() => setIsPlaying(false)}
-            />
+            {noteData?.audioUrl ? (
+              <>
+                <audio 
+                  ref={audioRef}
+                  src={`http://localhost:3001${noteData.audioUrl}`}
+                  onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
+                  onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
+                  onEnded={() => setIsPlaying(false)}
+                />
 
-            <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>
-              {new Date(currentTime * 1000).toISOString().substr(11, 8)}
-            </span>
-            
-            <div style={{ flex: 1, height: '4px', backgroundColor: 'var(--border-color)', borderRadius: '2px', position: 'relative', cursor: 'pointer' }} onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              const x = e.clientX - rect.left;
-              const pct = x / rect.width;
-              if (audioRef.current) audioRef.current.currentTime = pct * duration;
-            }}>
-              <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${(currentTime / duration) * 100 || 0}%`, backgroundColor: 'var(--primary-color)', borderRadius: '2px' }} />
-              <div style={{ position: 'absolute', left: `${(currentTime / duration) * 100 || 0}%`, top: '50%', transform: 'translate(-50%, -50%)', width: '12px', height: '12px', backgroundColor: 'var(--primary-color)', borderRadius: '50%' }} />
-            </div>
-            
-            <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-tertiary)' }}>
-              {new Date(duration * 1000).toISOString().substr(11, 8)}
-            </span>
-            
-            <div style={{ display: 'flex', gap: '24px', alignItems: 'center', marginLeft: '24px' }}>
-              <button 
-                onClick={() => { if (audioRef.current) audioRef.current.currentTime -= 5; }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
-              >
-                <FastForward size={18} style={{ transform: 'rotate(180deg)' }} />
-              </button>
-              
-              <button 
-                onClick={() => {
-                  if (!noteData?.audioUrl) {
-                    fileInputRef.current?.click();
-                    return;
-                  }
-                  if (isPlaying) {
-                    audioRef.current?.pause();
-                  } else {
-                    audioRef.current?.play();
-                  }
-                  setIsPlaying(!isPlaying);
-                }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-primary)' }}
-              >
-                {isPlaying ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" />}
-              </button>
-              
-              <button 
-                onClick={() => { if (audioRef.current) audioRef.current.currentTime += 5; }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
-              >
-                <FastForward size={18} />
-              </button>
-              
-              {!noteData?.audioUrl && (
-                <span style={{ fontSize: '11px', color: 'var(--accent-color)', fontWeight: 600 }}>点击上传录音</span>
-              )}
-            </div>
+                <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                  {new Date(currentTime * 1000).toISOString().substring(11, 19)}
+                </span>
+                
+                <div style={{ flex: 1, height: '4px', backgroundColor: 'var(--border-color)', borderRadius: '2px', position: 'relative', cursor: 'pointer' }} onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = e.clientX - rect.left;
+                  const pct = x / rect.width;
+                  if (audioRef.current) audioRef.current.currentTime = pct * duration;
+                }}>
+                  <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${(currentTime / duration) * 100 || 0}%`, backgroundColor: 'var(--primary-color)', borderRadius: '2px' }} />
+                  <div style={{ position: 'absolute', left: `${(currentTime / duration) * 100 || 0}%`, top: '50%', transform: 'translate(-50%, -50%)', width: '12px', height: '12px', backgroundColor: 'var(--primary-color)', borderRadius: '50%' }} />
+                </div>
+                
+                <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-tertiary)' }}>
+                  {new Date(duration * 1000).toISOString().substring(11, 19)}
+                </span>
+                
+                <div style={{ display: 'flex', gap: '24px', alignItems: 'center', marginLeft: '24px' }}>
+                  <button onClick={() => { if (audioRef.current) audioRef.current.currentTime -= 5; }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                    <FastForward size={18} style={{ transform: 'rotate(180deg)' }} />
+                  </button>
+                  
+                  <button onClick={() => {
+                    if (isPlaying) audioRef.current?.pause();
+                    else audioRef.current?.play();
+                    setIsPlaying(!isPlaying);
+                  }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-primary)' }}>
+                    {isPlaying ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" />}
+                  </button>
+                  
+                  <button onClick={() => { if (audioRef.current) audioRef.current.currentTime += 5; }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+                    <FastForward size={18} />
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '14px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  {isRecording ? (
+                    <>
+                      <div className="audio-wave">
+                        {audioVolumes.map((vol, i) => (
+                          <div 
+                            key={i} 
+                            className="audio-wave-bar" 
+                            style={{ height: `${vol}px`, animation: 'none', transition: 'height 0.05s ease' }}
+                          ></div>
+                        ))}
+                      </div>
+                      正在录音，请讲话...
+                    </>
+                  ) : '当前笔记暂无录音'}
+                </span>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  {isRecording ? (
+                    <button className="btn btn-primary" style={{ backgroundColor: 'var(--danger-color)', color: 'white', border: 'none', padding: '6px 16px', borderRadius: '16px' }} onClick={stopRecording}>
+                      停止录音并保存
+                    </button>
+                  ) : (
+                    <>
+                      <button className="btn btn-outline text-xs" style={{ color: 'var(--accent-color)', borderColor: 'var(--accent-color)', borderRadius: '16px', padding: '6px 16px', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={startRecording}>
+                        <Mic size={14} /> 开始录音
+                      </button>
+                      <button className="btn btn-outline text-xs" style={{ borderRadius: '16px', padding: '6px 16px' }} onClick={() => fileInputRef.current?.click()}>
+                        上传音频文件
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -468,14 +588,23 @@ export default function NoteDetail() {
           )}
           {activeTab === 'transcript' && (
             <div className="fade-in" style={{ padding: '24px 0', lineHeight: 1.8, color: 'var(--text-primary)' }}>
-              {noteData?.audioUrl ? (
+              {noteData?.transcript ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <div style={{ padding: '16px', backgroundColor: 'var(--bg-input)', borderRadius: '12px', fontSize: '14px' }}>
-                    <p style={{ marginBottom: '8px', fontWeight: 600 }}>AI 自动生成摘要：</p>
-                    <p style={{ color: 'var(--text-secondary)' }}>这是一段关于本地 AI 部署和知识主权的讨论。用户重点提到了如何通过 Ollama 和 Docker 在个人服务器上运行大模型，以确保数据不外传。</p>
-                  </div>
-                  <p>00:01 今天我们来聊聊 NovaNote 的核心架构...</p>
-                  <p>00:15 为什么要坚持本地化部署？因为数据主权是未来的核心竞争力...</p>
+                  {noteData.transcriptSummary && (
+                    <div style={{ padding: '16px', backgroundColor: 'var(--bg-input)', borderRadius: '12px', fontSize: '14px' }}>
+                      <p style={{ marginBottom: '8px', fontWeight: 600 }}>AI 自动生成摘要：</p>
+                      <p style={{ color: 'var(--text-secondary)' }}>{noteData.transcriptSummary}</p>
+                    </div>
+                  )}
+                  <div style={{ whiteSpace: 'pre-wrap' }}>{noteData.transcript}</div>
+                </div>
+              ) : noteData?.audioUrl ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 0', gap: '16px', color: 'var(--text-secondary)' }}>
+                  <span className="spin" style={{ color: 'var(--primary-color)' }}><Loader2 size={32} /></span>
+                  <p style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>正在通过 AI 提取语音内容...</p>
+                  <p style={{ fontSize: '13px', textAlign: 'center', maxWidth: '400px' }}>
+                    这可能需要几秒到一分钟的时间，请稍候刷新查看结果。
+                  </p>
                 </div>
               ) : (
                 <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-tertiary)' }}>

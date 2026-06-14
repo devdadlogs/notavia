@@ -59,8 +59,22 @@ services:
       - qdrant_data:/qdrant/storage
     restart: unless-stopped
 
+  # ── Whisper (Local Audio Transcription) ───────────────────
+  whisper:
+    image: hub.rat.dev/onerahmet/openai-whisper-asr-webservice:latest
+    container_name: notavia_whisper
+    ports:
+      - "9005:9000"
+    environment:
+      - ASR_MODEL=base # Options: tiny, base, small, medium, large
+      - ASR_ENGINE=openai_whisper
+    volumes:
+      - whisper_data:/root/.cache/whisper
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   redis_data:
   ollama_data:
   qdrant_data:
+  whisper_data:

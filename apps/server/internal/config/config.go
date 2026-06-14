@@ -21,6 +21,10 @@ type Config struct {
 	OpenAIBaseURL string
 	OpenAIKey     string
 	OpenAIModel   string
+	
+	WhisperBaseURL string
+	WhisperAPIKey  string
+	WhisperModel   string
 }
 
 var AppConfig Config
@@ -43,6 +47,9 @@ func Load() {
 		OpenAIBaseURL: getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
 		OpenAIKey:     getEnv("OPENAI_API_KEY", ""),
 		OpenAIModel:   getEnv("OPENAI_MODEL", "gpt-4o-mini"),
+		WhisperBaseURL: getEnv("WHISPER_BASE_URL", "http://localhost:9005/v1"),
+		WhisperAPIKey:  getEnv("WHISPER_API_KEY", ""),
+		WhisperModel:   getEnv("WHISPER_MODEL", "whisper-1"),
 	}
 
 	// Ensure upload directory exists

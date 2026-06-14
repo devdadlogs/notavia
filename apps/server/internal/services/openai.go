@@ -6,7 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -271,4 +274,70 @@ func (p *OpenAIProvider) Embed(text string) ([]float32, error) {
 	}
 
 	return result.Data[0].Embedding, nil
+}
+
+func (p *OpenAIProvider) TranscribeAudio(filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open audio file: %w", err)
+	}
+	defer file.Close()
+
+	var requestBody bytes.Buffer
+	writer := multipart.NewWriter(&requestBody)
+
+	endpoint := p.baseURL + "/audio/transcriptions"
+	fileField := "file"
+
+	// Support for onerahmet/openai-whisper-asr-webservice
+	if strings.Contains(p.baseURL, "9005") || strings.HasSuffix(p.baseURL, "asr") {
+		fileField = "audio_file"
+		// If they configured to localhost:9005 or localhost:9005/v1, force it to /asr
+		base := strings.TrimSuffix(p.baseURL, "/v1")
+		base = strings.TrimSuffix(base, "/")
+		if !strings.HasSuffix(base, "/asr") {
+			base += "/asr"
+		}
+		endpoint = base + "?output=json"
+	}
+
+	part, err := writer.CreateFormFile(fileField, filepath.Base(filePath))
+	if err != nil {
+		return "", fmt.Errorf("failed to create form file: %w", err)
+	}
+	if _, err := io.Copy(part, file); err != nil {
+		return "", fmt.Errorf("failed to copy file to form: %w", err)
+	}
+	// model is optional for local whisper, but required for openai
+	if err := writer.WriteField("model", p.model); err != nil {
+		return "", err
+	}
+	writer.Close()
+
+	req, err := http.NewRequest("POST", endpoint, &requestBody)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("transcription request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("transcription failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var result struct {
+		Text string `json:"text"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+
+	return result.Text, nil
 }

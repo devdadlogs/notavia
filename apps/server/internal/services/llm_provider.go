@@ -14,6 +14,7 @@ type LLMProvider interface {
 	GenerateJSON(prompt string) (string, error)
 	GenerateStream(prompt string, outChan chan<- string, errChan chan<- error)
 	Embed(text string) ([]float32, error)
+	TranscribeAudio(filePath string) (string, error)
 }
 
 // Ensure interface compliance

@@ -450,11 +450,7 @@ export default function Dashboard() {
                   {(note.contentText || '点击此处开始记录你的灵感和想法...').replace(/#{1,6}\s?/g, '').replace(/\*\*/g, '').replace(/[-*]\s/g, '').replace(/\n/g, ' ')}
                 </p>
                 
-                {/* Mock Audio Player inside Card */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: 'var(--bg-input)', padding: '8px 16px', borderRadius: 'var(--radius-sm)', marginBottom: '16px', width: 'fit-content' }}>
-                  <Play size={14} color="var(--text-primary)" />
-                  <span style={{ fontSize: '12px', color: 'var(--text-primary)', fontWeight: 500 }}>48秒</span>
-                </div>
+
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>

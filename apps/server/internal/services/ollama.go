@@ -273,3 +273,7 @@ func (s *OllamaService) Embed(text string) ([]float32, error) {
 
 	return result.Embeddings[0], nil
 }
+
+func (s *OllamaService) TranscribeAudio(filePath string) (string, error) {
+	return "", fmt.Errorf("audio transcription is not supported by Ollama")
+}

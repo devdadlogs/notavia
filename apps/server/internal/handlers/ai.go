@@ -73,6 +73,20 @@ func getLLMProvider(userID string) services.LLMProvider {
 	return services.NewOllamaService()
 }
 
+// getAudioProvider isolates audio transcription configuration to support separate Docker containers for Whisper
+func getAudioProvider() services.LLMProvider {
+	baseURL := config.AppConfig.WhisperBaseURL
+	apiKey := config.AppConfig.WhisperAPIKey
+	if apiKey == "" {
+		apiKey = "dummy-key-for-local" // Local deployments usually don't verify API key
+	}
+	model := config.AppConfig.WhisperModel
+	if model == "" {
+		model = "whisper-1"
+	}
+	return services.NewOpenAIProvider(baseURL, apiKey, model)
+}
+
 // getEmbeddingProvider always returns Ollama because our Qdrant collection is fixed at 768 dimensions (nomic-embed-text).
 // OpenAI embeddings (1536 dims) or DeepSeek (unsupported) will break the vector database.
 func getEmbeddingProvider() services.LLMProvider {

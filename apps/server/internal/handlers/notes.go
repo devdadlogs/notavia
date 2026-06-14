@@ -229,6 +229,27 @@ func UploadAudio(c *gin.Context) {
 		return
 	}
 
+	// Start background transcription
+	go func(nID string, uID string, fPath string) {
+		audioProvider := getAudioProvider()
+		transcript, err := audioProvider.TranscribeAudio(fPath)
+		if err != nil {
+			fmt.Printf("Transcription failed for note %s: %v\n", nID, err)
+			return
+		}
+
+		// Save transcript
+		config.DB.Model(&models.Note{}).Where("id = ?", nID).Update("transcript", transcript)
+
+		// Generate summary
+		textProvider := getLLMProvider(uID)
+		summaryPrompt := fmt.Sprintf("请根据以下录音原文生成一段100字以内的核心摘要：\n\n%s", transcript)
+		summary, err := textProvider.Generate(summaryPrompt)
+		if err == nil {
+			config.DB.Model(&models.Note{}).Where("id = ?", nID).Update("transcript_summary", summary)
+		}
+	}(noteID, userID, filePath)
+
 	c.JSON(http.StatusOK, gin.H{
 		"message":  "Audio uploaded successfully",
 		"audioUrl": audioURL,

@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/notavia/server/internal/config"
@@ -30,6 +32,7 @@ func streamResponse(c *gin.Context, outChan <-chan string, errChan <-chan error)
 		case err, ok := <-errChan:
 			if ok && err != nil {
 				c.SSEvent("error", err.Error())
+				c.Writer.Flush()
 			}
 			return false // End stream on error
 		}
@@ -67,6 +70,12 @@ func getLLMProvider(userID string) services.LLMProvider {
 	}
 
 	// Default to Ollama
+	return services.NewOllamaService()
+}
+
+// getEmbeddingProvider always returns Ollama because our Qdrant collection is fixed at 768 dimensions (nomic-embed-text).
+// OpenAI embeddings (1536 dims) or DeepSeek (unsupported) will break the vector database.
+func getEmbeddingProvider() services.LLMProvider {
 	return services.NewOllamaService()
 }
 
@@ -263,15 +272,15 @@ func AISprout(c *gin.Context) {
 		return
 	}
 
-	// 1. Generate embedding for the input content
-	embedding, err := getLLMProvider(userID).Embed(input.Content)
+	// 1. Generate embedding for the input content (Always use local)
+	embedding, err := getEmbeddingProvider().Embed(input.Content)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate embedding: " + err.Error()})
 		return
 	}
 
 	// 2. Search Qdrant for similar notes
-	results, err := getQdrantService().SearchRelatedNotes(embedding, 5, input.NoteID)
+	results, err := getQdrantService().SearchRelatedNotes(userID, embedding, 5, input.NoteID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to search vector db: " + err.Error()})
 		return
@@ -279,6 +288,63 @@ func AISprout(c *gin.Context) {
 
 	logAIUsage(userID, "sprout")
 	c.JSON(http.StatusOK, gin.H{"results": results})
+}
+
+// --- Global Knowledge Base Chat ---
+
+type AIChatInput struct {
+	Query string `json:"query"`
+}
+
+func AIChatWithNotes(c *gin.Context) {
+	var input AIChatInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	userID := middleware.GetUserID(c)
+	provider := getLLMProvider(userID)
+
+	outChan := make(chan string)
+	errChan := make(chan error, 1)
+
+	go func() {
+		// 1. Generate embedding for user query (Always use local embeddings to match DB dimensions)
+		embedding, err := getEmbeddingProvider().Embed(input.Query)
+		if err != nil {
+			errChan <- fmt.Errorf("failed to generate embedding: %w", err)
+			return
+		}
+
+		// 2. Search related notes
+		results, err := getQdrantService().SearchRelatedNotes(userID, embedding, 5, "")
+		if err != nil {
+			errChan <- fmt.Errorf("failed to search notes: %w", err)
+			return
+		}
+
+		// 3. Construct prompt
+		var contextBuilder strings.Builder
+		for i, res := range results {
+			contextBuilder.WriteString(fmt.Sprintf("\n--- 引用片段 %d (来自笔记《%s》) ---\n%s\n", i+1, res.Title, res.Content))
+		}
+
+		prompt := fmt.Sprintf(`你是一个专属私人知识库的AI助手。请基于以下我过往笔记中的引用片段，来回答我的问题。
+如果片段中没有相关信息，请基于你自己的常识回答，但要明确说明“你的笔记中未提及此事”。
+
+【我的问题】
+%s
+
+【相关笔记片段】%s
+
+请用清晰易懂的语言回答，并在适当的时候提到你参考了哪篇笔记。`, input.Query, contextBuilder.String())
+
+		// 4. Generate stream
+		provider.GenerateStream(prompt, outChan, errChan)
+	}()
+
+	streamResponse(c, outChan, errChan)
 }
 
 // --- Helper ---

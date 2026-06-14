@@ -3,9 +3,10 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import api from '../../services/api';
 import { 
-  Calendar, FileText, BarChart2, Folder, BookOpen, Mic, Trash2, ChevronRight, Gift, Settings
+  Calendar, FileText, BarChart2, Folder, BookOpen, Mic, Trash2, ChevronRight, Gift, Settings, Search
 } from 'lucide-react';
 import SettingsModal from '../ui/SettingsModal';
+import GlobalAIChat from '../ui/GlobalAIChat';
 
 export default function Sidebar() {
   const navigate = useNavigate();
@@ -14,6 +15,7 @@ export default function Sidebar() {
   const logout = useAuthStore(state => state.logout);
   const [stats, setStats] = useState({ total: 0, daily: [] as {date: string, count: number}[] });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isAIChatOpen, setIsAIChatOpen] = useState(false);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -55,7 +57,7 @@ export default function Sidebar() {
       {/* User Profile */}
       <div 
         onClick={() => setIsSettingsOpen(true)}
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', cursor: 'pointer', padding: '8px', borderRadius: '8px', margin: '-8px -8px 24px -8px' }}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', cursor: 'pointer', padding: '8px', borderRadius: '8px', margin: '-8px -8px 20px -8px' }}
         className="hover-bg-input"
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -66,6 +68,35 @@ export default function Sidebar() {
         </div>
         <Settings size={18} color="var(--text-tertiary)" />
       </div>
+
+      {/* AI Search Bar */}
+      <div 
+        onClick={() => setIsAIChatOpen(true)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
+          padding: '10px 12px', borderRadius: '8px', marginBottom: '24px',
+          backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-color)',
+          color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '14px',
+          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02)', transition: 'border-color 0.2s, background-color 0.2s',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.borderColor = '#10b981';
+          e.currentTarget.style.backgroundColor = 'var(--bg-panel)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.borderColor = 'var(--border-color)';
+          e.currentTarget.style.backgroundColor = 'var(--bg-input)';
+        }}
+      >
+        <Search size={16} style={{ color: '#10b981' }} />
+        <span style={{ flex: 1 }}>全局 AI 检索...</span>
+        <div style={{ 
+          fontSize: '11px', padding: '2px 6px', borderRadius: '4px', 
+          backgroundColor: 'var(--bg-panel)', border: '1px solid var(--border-color)',
+          color: 'var(--text-tertiary)', fontWeight: 600
+        }}>⌘K</div>
+      </div>
+
 
       {/* VIP Banner */}
       <div style={{ 
@@ -155,10 +186,8 @@ export default function Sidebar() {
         </button>
       </div>
 
-      <SettingsModal 
-        isOpen={isSettingsOpen} 
-        onClose={() => setIsSettingsOpen(false)} 
-      />
+      {isSettingsOpen && <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />}
+      <GlobalAIChat isOpen={isAIChatOpen} onClose={() => setIsAIChatOpen(false)} />
     </div>
   );
 }

@@ -46,12 +46,13 @@ export default function BlockEditor({ noteId }: BlockEditorProps) {
     if (noteId) loadNote();
   }, [noteId]);
 
-  const saveNote = useCallback(async (newTitle: string, contentJson: any, newCover: string | null, newIcon: string | null) => {
+  const saveNote = useCallback(async (newTitle: string, contentJson: any, contentText: string, newCover: string | null, newIcon: string | null) => {
     setIsSaving(true);
     try {
       await api.put(`/notes/${noteId}`, {
         title: newTitle || 'Untitled',
         contentJson,
+        contentText,
         coverImage: newCover,
         icon: newIcon
       });
@@ -74,7 +75,7 @@ export default function BlockEditor({ noteId }: BlockEditorProps) {
     ],
     content: '',
     onUpdate: ({ editor }) => {
-      saveNote(title, editor.getJSON(), coverImage, icon);
+      saveNote(title, editor.getJSON(), editor.getText(), coverImage, icon);
     },
     editorProps: {
       handleDrop: (view, event, slice, moved) => {
@@ -99,7 +100,7 @@ export default function BlockEditor({ noteId }: BlockEditorProps) {
     const newTitle = e.target.value;
     setTitle(newTitle);
     if (editor) {
-      saveNote(newTitle, editor.getJSON(), coverImage, icon);
+      saveNote(newTitle, editor.getJSON(), editor.getText(), coverImage, icon);
     }
   };
 
@@ -127,7 +128,7 @@ export default function BlockEditor({ noteId }: BlockEditorProps) {
       try {
         const url = await uploadFile(e.target.files[0]);
         setCoverImage(url);
-        if (editor) saveNote(title, editor.getJSON(), url, icon);
+        if (editor) saveNote(title, editor.getJSON(), editor.getText(), url, icon);
       } catch (error) {
         console.error('Cover upload failed', error);
       }
@@ -138,7 +139,7 @@ export default function BlockEditor({ noteId }: BlockEditorProps) {
     const emojis = ['🚀', '🧠', '💡', '🔥', '✨', '📝', '🎯'];
     const random = emojis[Math.floor(Math.random() * emojis.length)];
     setIcon(random);
-    if (editor) saveNote(title, editor.getJSON(), coverImage, random);
+    if (editor) saveNote(title, editor.getJSON(), editor.getText(), coverImage, random);
   };
 
   if (!editor || !noteData) return <div>Loading editor...</div>;

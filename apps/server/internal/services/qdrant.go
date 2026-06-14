@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/google/uuid"
 )
 
 // QdrantService handles communication with the Qdrant vector database.
@@ -60,23 +62,24 @@ func (s *QdrantService) InitCollection() error {
 	return nil
 }
 
-// UpsertNote chunks the note and stores embeddings in Qdrant.
-// We use a simplified UUID generation for point IDs.
-func (s *QdrantService) UpsertNote(noteID, title, content string, embedding []float32) error {
-	// For simplicity in this demo, we store the whole note as 1 point.
-	// In production, we'd chunk the content.
+// UpsertNoteChunks stores multiple chunks for a single note in Qdrant.
+func (s *QdrantService) UpsertNoteChunks(userID, noteID, title string, chunks []string, embeddings [][]float32) error {
+	var points []map[string]interface{}
+	for i, chunk := range chunks {
+		points = append(points, map[string]interface{}{
+			"id":      uuid.New().String(),
+			"vector":  embeddings[i],
+			"payload": map[string]interface{}{
+				"userId":  userID,
+				"noteId":  noteID, // we need this to delete old chunks
+				"title":   title,
+				"content": chunk,
+			},
+		})
+	}
 	
 	reqBody := map[string]interface{}{
-		"points": []map[string]interface{}{
-			{
-				"id":      noteID, // We use noteID string as UUID in Qdrant if it's a valid UUID, which our note ID is.
-				"vector":  embedding,
-				"payload": map[string]interface{}{
-					"title":   title,
-					"content": content,
-				},
-			},
-		},
+		"points": points,
 	}
 	
 	body, _ := json.Marshal(reqBody)
@@ -91,7 +94,71 @@ func (s *QdrantService) UpsertNote(noteID, title, content string, embedding []fl
 
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to upsert point: %s", string(b))
+		return fmt.Errorf("failed to upsert points: %s", string(b))
+	}
+	return nil
+}
+
+// DeleteNotesByNoteID deletes all points associated with a given noteID.
+func (s *QdrantService) DeleteNotesByNoteID(noteID string) error {
+	reqBody := map[string]interface{}{
+		"filter": map[string]interface{}{
+			"must": []map[string]interface{}{
+				{
+					"key": "noteId",
+					"match": map[string]interface{}{
+						"value": noteID,
+					},
+				},
+			},
+		},
+	}
+
+	body, _ := json.Marshal(reqBody)
+	req, _ := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/collections/%s/points/delete", s.baseURL, s.collection), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to delete points: %s", string(b))
+	}
+	return nil
+}
+
+// DeleteAllNotesByUserID deletes all points associated with a given userID.
+func (s *QdrantService) DeleteAllNotesByUserID(userID string) error {
+	reqBody := map[string]interface{}{
+		"filter": map[string]interface{}{
+			"must": []map[string]interface{}{
+				{
+					"key": "userId",
+					"match": map[string]interface{}{
+						"value": userID,
+					},
+				},
+			},
+		},
+	}
+
+	body, _ := json.Marshal(reqBody)
+	req, _ := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/collections/%s/points/delete", s.baseURL, s.collection), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to delete all points for user: %s", string(b))
 	}
 	return nil
 }
@@ -104,23 +171,37 @@ type SearchResult struct {
 	Score   float32 `json:"score"`
 }
 
-func (s *QdrantService) SearchRelatedNotes(queryEmbedding []float32, limit int, excludeNoteID string) ([]SearchResult, error) {
+func (s *QdrantService) SearchRelatedNotes(userID string, queryEmbedding []float32, limit int, excludeNoteID string) ([]SearchResult, error) {
 	reqBody := map[string]interface{}{
 		"vector": queryEmbedding,
 		"limit":  limit,
 		"with_payload": true,
 	}
 
+	// Filter by userID and optionally exclude noteID
+	mustConditions := []map[string]interface{}{
+		{
+			"key": "userId",
+			"match": map[string]interface{}{
+				"value": userID,
+			},
+		},
+	}
+
+	filter := map[string]interface{}{
+		"must": mustConditions,
+	}
+
 	// Exclude the current note from results
 	if excludeNoteID != "" {
-		reqBody["filter"] = map[string]interface{}{
-			"must_not": []map[string]interface{}{
-				{
-					"has_id": []string{excludeNoteID},
-				},
+		filter["must_not"] = []map[string]interface{}{
+			{
+				"has_id": []string{excludeNoteID},
 			},
 		}
 	}
+	
+	reqBody["filter"] = filter
 
 	body, _ := json.Marshal(reqBody)
 	req, _ := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/collections/%s/points/search", s.baseURL, s.collection), bytes.NewReader(body))
@@ -142,6 +223,7 @@ func (s *QdrantService) SearchRelatedNotes(queryEmbedding []float32, limit int, 
 			ID      string  `json:"id"`
 			Score   float32 `json:"score"`
 			Payload struct {
+				NoteID  string `json:"noteId"`
 				Title   string `json:"title"`
 				Content string `json:"content"`
 			} `json:"payload"`
@@ -155,7 +237,7 @@ func (s *QdrantService) SearchRelatedNotes(queryEmbedding []float32, limit int, 
 	var searchResults []SearchResult
 	for _, item := range result.Result {
 		searchResults = append(searchResults, SearchResult{
-			NoteID:  item.ID,
+			NoteID:  item.Payload.NoteID,
 			Title:   item.Payload.Title,
 			Content: item.Payload.Content,
 			Score:   item.Score,

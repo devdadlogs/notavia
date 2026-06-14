@@ -37,6 +37,27 @@ type UpdateNoteInput struct {
 
 // --- Handlers ---
 
+func ReindexNotes(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	var notes []models.Note
+	if err := config.DB.Where("user_id = ? AND content_text != '' AND is_trashed = ?", userID, false).Find(&notes).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch notes"})
+		return
+	}
+
+	// Delete all existing points for this user to ensure a clean slate
+	if err := getQdrantService().DeleteAllNotesByUserID(userID); err != nil {
+		fmt.Printf("Warning: Failed to delete all points for user %s: %v\n", userID, err)
+	}
+
+	// Run synchronously to ensure progress is tracked and completed before returning
+	for _, note := range notes {
+		indexNoteInVectorDB(userID, note.ID, note.Title, note.ContentText)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Reindexing completed", "count": len(notes)})
+}
+
 func CreateNote(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var input CreateNoteInput
@@ -355,13 +376,35 @@ func indexNoteInVectorDB(userID, noteID, title, contentText string) {
 	if contentText == "" {
 		return // Skip empty notes
 	}
-	embedding, err := getLLMProvider(userID).Embed(contentText)
-	if err != nil {
-		fmt.Printf("Failed to embed note %s: %v\n", noteID, err)
-		return
+	// Delete old points for this note first
+	if err := getQdrantService().DeleteNotesByNoteID(noteID); err != nil {
+		fmt.Printf("Failed to delete old points for note %s: %v\n", noteID, err)
 	}
-	if err := getQdrantService().UpsertNote(noteID, title, contentText, embedding); err != nil {
-		fmt.Printf("Failed to upsert note %s to Qdrant: %v\n", noteID, err)
+
+	// Simple chunking (e.g. 500 characters per chunk)
+	chunkSize := 500
+	runes := []rune(contentText)
+	var chunks []string
+	var embeddings [][]float32
+
+	for i := 0; i < len(runes); i += chunkSize {
+		end := i + chunkSize
+		if end > len(runes) {
+			end = len(runes)
+		}
+		chunkText := string(runes[i:end])
+		chunks = append(chunks, chunkText)
+		
+		embedding, err := getEmbeddingProvider().Embed(chunkText)
+		if err != nil {
+			fmt.Printf("Failed to embed chunk %d for note %s: %v\n", i/chunkSize, noteID, err)
+			return
+		}
+		embeddings = append(embeddings, embedding)
+	}
+
+	if err := getQdrantService().UpsertNoteChunks(userID, noteID, title, chunks, embeddings); err != nil {
+		fmt.Printf("Failed to upsert note chunks for %s to Qdrant: %v\n", noteID, err)
 	}
 }
 

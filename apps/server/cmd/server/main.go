@@ -75,6 +75,7 @@ func main() {
 		notes := protected.Group("/notes")
 		{
 			notes.POST("", handlers.CreateNote)
+			notes.POST("/reindex", handlers.ReindexNotes)
 			notes.POST("/clipper", handlers.WebClipper)
 			notes.GET("", handlers.GetNotes)
 			notes.GET("/stats", handlers.GetStats)
@@ -109,6 +110,7 @@ func main() {
 			ai.POST("/rewrite", handlers.AIRewrite)
 			ai.POST("/suggest-tags", handlers.AISuggestTags)
 			ai.POST("/sprout", handlers.AISprout)
+			ai.POST("/chat-with-notes", handlers.AIChatWithNotes)
 		}
 	}
 

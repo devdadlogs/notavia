@@ -26,6 +26,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [openAiKey, setOpenAiKey] = useState('');
   const [openAiModel, setOpenAiModel] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isReindexing, setIsReindexing] = useState(false);
 
   const [selectedProviderId, setSelectedProviderId] = useState('custom');
 
@@ -57,6 +58,21 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     if (provider && provider.id !== 'custom') {
       setOpenAiBaseUrl(provider.baseUrl);
       setOpenAiModel(provider.models[0] || '');
+    }
+  };
+
+  const handleReindex = async () => {
+    if (!confirm('重建知识库索引可能需要几分钟时间，期间请勿关闭页面。确定要开始吗？')) return;
+    
+    setIsReindexing(true);
+    try {
+      const response = await api.post('/notes/reindex');
+      alert(`✅ 索引重建完成！成功处理了 ${response.data.count || 0} 篇笔记。`);
+    } catch (error) {
+      console.error('Failed to reindex', error);
+      alert('触发重建索引失败，请检查网络或后端状态。');
+    } finally {
+      setIsReindexing(false);
     }
   };
 
@@ -229,6 +245,22 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </div>
             </div>
           )}
+          
+          <div style={{ marginTop: '24px', padding: '16px', backgroundColor: 'var(--bg-input)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: 'var(--text-primary)' }}>知识库维护</h4>
+            <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
+              如果您发现全局知识库搜索不到某些旧笔记，可能是因为它们还没有被存入向量数据库中。您可以点击下方按钮，对所有笔记进行重新向量化索引（这可能需要一些时间，由笔记数量决定）。
+            </p>
+            <button 
+              onClick={handleReindex} 
+              disabled={isReindexing}
+              className="btn btn-outline" 
+              style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
+            >
+              <Save size={16} />
+              {isReindexing ? '正在重建索引...' : '重建全部知识库索引'}
+            </button>
+          </div>
         </div>
 
         {/* Footer */}

@@ -266,7 +266,7 @@ function useTableFloatingMenu(editor: Editor | null) {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
   const update = useCallback(() => {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed || !editor.view || !editor.view.dom) return;
     
     // Prosemirror-tables adds .selectedCell to selected table cells
     const selectedCells = Array.from(editor.view.dom.querySelectorAll('.selectedCell'));

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
-import { Search, Gift, Play, MoreHorizontal, Mic, Edit3, Plus, Menu, Loader2, Trash2, Upload } from 'lucide-react';
+import { Search, Play, MoreHorizontal, Mic, Edit3, Plus, Menu, Loader2, Trash2, Download } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
 import { uploadFile } from '../../utils/fileUpload';
@@ -11,6 +11,7 @@ export default function Dashboard() {
   const [clipUrl, setClipUrl] = useState('');
   const [isClipping, setIsClipping] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
   const user = useAuthStore(state => state.user);
   const toggleSidebar = useUIStore(state => state.toggleSidebar);
@@ -366,11 +367,14 @@ export default function Dashboard() {
         </button>
         <div className="search-input-wrapper">
           <Search size={18} color="var(--text-tertiary)" />
-          <input type="text" className="search-input" placeholder="搜索笔记" />
+          <input 
+            type="text" 
+            className="search-input" 
+            placeholder="搜索笔记 (标题或内容)" 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
         </div>
-        <button style={{ background: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '50%', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-          <Gift size={18} color="var(--text-secondary)" />
-        </button>
       </header>
 
       {/* Main Content Area */}
@@ -383,11 +387,10 @@ export default function Dashboard() {
               <span style={{ fontSize: '24px' }}>💬</span>
             </div>
             <div>
-              <h1 style={{ fontSize: '20px', fontWeight: 600, marginBottom: '4px' }}>欢迎来到Get笔记</h1>
+              <h1 style={{ fontSize: '20px', fontWeight: 600, marginBottom: '4px' }}>欢迎来到 Notavia</h1>
               <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>现在，开始你的灵感之旅吧</p>
             </div>
           </div>
-          <button className="btn btn-secondary" style={{ fontSize: '12px' }}>聊一聊 ›</button>
         </div>
 
         {/* Web Clipper */}
@@ -410,28 +413,13 @@ export default function Dashboard() {
               {isClipping ? <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Loader2 size={16} className="spin" /> 提取中</span> : '开始提取'}
             </button>
             <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '0 16px', cursor: 'pointer', color: 'var(--text-secondary)', transition: 'all 0.2s', gap: '8px' }} className="btn-hover-effect">
-              {isImporting ? <Loader2 size={16} className="spin" /> : <Upload size={16} />}
+              {isImporting ? <Loader2 size={16} className="spin" /> : <Download size={16} />}
               <span style={{ fontSize: '14px', whiteSpace: 'nowrap' }}>导入文件</span>
               <input type="file" accept=".txt,.md,.markdown,.html,.htm,.docx,.pdf,.xlsx,.xls,.csv,.png,.jpg,.jpeg,.gif,.webp" onChange={handleFileUpload} style={{ display: 'none' }} disabled={isImporting} />
             </label>
           </div>
         </div>
 
-        {/* Recently Used */}
-        <div style={{ marginBottom: '40px' }}>
-          <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>最近使用</h2>
-          <div style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '8px' }}>
-            {/* Mock Card */}
-            <div className="card card-hoverable" style={{ minWidth: '240px', cursor: 'pointer' }} onClick={() => notes[0] && navigate(`/n/${notes[0].id}`)}>
-              <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '8px' }}>学习笔记</div>
-              <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '16px' }}>4088个内容 · 856003人在用</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                <div style={{ width: '16px', height: '16px', borderRadius: '50%', backgroundColor: '#e2e8f0' }} />
-                Get达人 创建
-              </div>
-            </div>
-          </div>
-        </div>
 
         {/* Note List */}
         <div>
@@ -443,7 +431,25 @@ export default function Dashboard() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {notes.map(note => (
+            {(() => {
+              const filteredNotes = notes.filter(note => {
+                if (!searchQuery) return true;
+                const query = searchQuery.toLowerCase();
+                return (note.title?.toLowerCase().includes(query)) || 
+                       (note.contentText?.toLowerCase().includes(query));
+              });
+
+              if (filteredNotes.length === 0) {
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 0', color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-panel)', borderRadius: '16px', border: '1px dashed var(--border-color)' }}>
+                    <Search size={40} style={{ marginBottom: '16px', opacity: 0.2 }} />
+                    <p style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-secondary)' }}>未找到相关笔记</p>
+                    {searchQuery && <p style={{ fontSize: '13px', marginTop: '4px' }}>试着换个关键词，或者使用左侧“全局 AI 检索”进行语义搜索</p>}
+                  </div>
+                );
+              }
+
+              return filteredNotes.map(note => (
               <div key={note.id} className="card card-hoverable" style={{ padding: '24px', cursor: 'pointer' }} onClick={() => navigate(`/n/${note.id}`)}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
                   <h3 style={{ fontSize: '18px', fontWeight: 600, margin: 0 }}>{note.title || '无标题笔记'}</h3>
@@ -477,7 +483,8 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
-            ))}
+              ));
+            })()}
           </div>
         </div>
 

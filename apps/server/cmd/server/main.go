@@ -78,11 +78,13 @@ func main() {
 			notes.POST("/reindex", handlers.ReindexNotes)
 			notes.POST("/clipper", handlers.WebClipper)
 			notes.GET("/export", handlers.ExportNotes)
+			notes.DELETE("/trash/empty", handlers.EmptyTrash)
 			notes.GET("", handlers.GetNotes)
 			notes.GET("/stats", handlers.GetStats)
 			notes.GET("/:id", handlers.GetNote)
 			notes.PUT("/:id", handlers.UpdateNote)
 			notes.DELETE("/:id", handlers.TrashNote)
+			notes.DELETE("/:id/permanent", handlers.DeleteNotePermanent)
 			notes.POST("/:id/audio", handlers.UploadAudio)
 		}
 

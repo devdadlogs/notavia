@@ -525,13 +525,6 @@ export default function NoteDetail() {
             }} />
             {syncState === 'offline' ? '🔴 离线记录中' : (isSaving ? '🟡 同步中' : '🟢 已同步')}
           </div>
-
-          <button style={{ background: 'var(--bg-input)', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-            <Gift size={16} color="var(--text-secondary)" />
-          </button>
-          <button style={{ background: 'var(--bg-input)', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-            <MoreVertical size={16} color="var(--text-secondary)" />
-          </button>
         </div>
       </header>
 

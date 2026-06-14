@@ -157,9 +157,10 @@ func CreateNote(c *gin.Context) {
 func GetNotes(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	notebookID := c.Query("notebookId")
+	isTrashed := c.Query("isTrashed") == "true"
 
 	var notes []models.Note
-	query := config.DB.Where("user_id = ? AND is_trashed = ?", userID, false)
+	query := config.DB.Where("user_id = ? AND is_trashed = ?", userID, isTrashed)
 
 	if notebookID != "" {
 		query = query.Where("notebook_id = ?", notebookID)
@@ -282,6 +283,25 @@ func TrashNote(c *gin.Context) {
 	}()
 
 	c.JSON(http.StatusOK, gin.H{"message": "Note trashed"})
+}
+
+func DeleteNotePermanent(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	noteID := c.Param("id")
+
+	result := config.DB.Where("id = ? AND user_id = ?", noteID, userID).Delete(&models.Note{})
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Note not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Note permanently deleted"})
+}
+
+func EmptyTrash(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+
+	result := config.DB.Where("user_id = ? AND is_trashed = ?", userID, true).Delete(&models.Note{})
+	c.JSON(http.StatusOK, gin.H{"message": "Trash emptied", "count": result.RowsAffected})
 }
 
 func UploadAudio(c *gin.Context) {

@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"archive/zip"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gin-gonic/gin"
@@ -37,6 +40,59 @@ type UpdateNoteInput struct {
 }
 
 // --- Handlers ---
+
+func ExportNotes(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	var notes []models.Note
+	if err := config.DB.Preload("Notebook").Where("user_id = ? AND is_trashed = ?", userID, false).Find(&notes).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch notes for export"})
+		return
+	}
+
+	c.Writer.Header().Set("Content-Type", "application/zip")
+	c.Writer.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"Notavia_Export_%s.zip\"", time.Now().Format("2006-01-02")))
+
+	zipWriter := zip.NewWriter(c.Writer)
+	defer zipWriter.Close()
+
+	// Track filenames to avoid duplicates
+	filenames := make(map[string]int)
+
+	for _, note := range notes {
+		folderPath := ""
+		if note.Notebook != nil {
+			folderPath = note.Notebook.Name + "/"
+		}
+
+		title := note.Title
+		if title == "" {
+			title = "Untitled"
+		}
+		// Sanitize filename
+		title = strings.ReplaceAll(title, "/", "-")
+		title = strings.ReplaceAll(title, "\\", "-")
+
+		filename := folderPath + title + ".md"
+		if count, exists := filenames[filename]; exists {
+			filenames[filename]++
+			filename = fmt.Sprintf("%s%s (%d).md", folderPath, title, count)
+		} else {
+			filenames[filename] = 1
+		}
+
+		f, err := zipWriter.Create(filename)
+		if err != nil {
+			continue
+		}
+
+		content := fmt.Sprintf("# %s\n\n%s", note.Title, note.ContentText)
+		if note.Transcript != "" {
+			content += fmt.Sprintf("\n\n---\n## 录音内容\n\n%s", note.Transcript)
+		}
+
+		_, _ = io.WriteString(f, content)
+	}
+}
 
 func ReindexNotes(c *gin.Context) {
 	userID := middleware.GetUserID(c)

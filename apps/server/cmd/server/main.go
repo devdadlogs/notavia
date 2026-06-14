@@ -77,6 +77,7 @@ func main() {
 			notes.POST("", handlers.CreateNote)
 			notes.POST("/reindex", handlers.ReindexNotes)
 			notes.POST("/clipper", handlers.WebClipper)
+			notes.GET("/export", handlers.ExportNotes)
 			notes.GET("", handlers.GetNotes)
 			notes.GET("/stats", handlers.GetStats)
 			notes.GET("/:id", handlers.GetNote)

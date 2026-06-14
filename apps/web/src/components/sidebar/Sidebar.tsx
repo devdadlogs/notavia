@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import api from '../../services/api';
 import { 
-  Calendar, FileText, BarChart2, Folder, BookOpen, Mic, Trash2, ChevronRight, Gift, Settings, Search
+  Calendar, FileText, BarChart2, Folder, BookOpen, Mic, Trash2, ChevronRight, Gift, Settings, Search, Download
 } from 'lucide-react';
 import SettingsModal from '../ui/SettingsModal';
 import GlobalAIChat from '../ui/GlobalAIChat';
@@ -16,6 +16,36 @@ export default function Sidebar() {
   const [stats, setStats] = useState({ total: 0, daily: [] as {date: string, count: number}[] });
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAIChatOpen, setIsAIChatOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = async () => {
+    try {
+      setIsExporting(true);
+      const response = await api.get('/notes/export', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      
+      const contentDisposition = response.headers['content-disposition'];
+      let filename = 'Notavia_Export.zip';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (filenameMatch && filenameMatch.length === 2) {
+          filename = filenameMatch[1];
+        }
+      }
+      
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error("Export failed:", err);
+      alert("导出失败，请重试");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -180,8 +210,17 @@ export default function Sidebar() {
       </div>
 
       {/* Footer Settings / Logout */}
-      <div style={{ marginTop: 'auto', paddingTop: '16px' }}>
-        <button className="btn btn-outline" onClick={logout} style={{ width: '100%', fontSize: '12px' }}>
+      <div style={{ marginTop: 'auto', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <button 
+          className="btn btn-outline" 
+          onClick={handleExport} 
+          disabled={isExporting}
+          style={{ width: '100%', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+        >
+          <Download size={14} />
+          {isExporting ? '正在打包...' : '导出全部笔记'}
+        </button>
+        <button className="btn btn-outline" onClick={logout} style={{ width: '100%', fontSize: '12px', color: 'var(--text-secondary)' }}>
           退出登录
         </button>
       </div>

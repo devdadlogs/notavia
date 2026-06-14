@@ -10,6 +10,7 @@ import { Audio } from './extensions/Audio';
 import api from '../../services/api';
 import { uploadFile } from '../../utils/fileUpload';
 import { Image as ImageIcon, Smile, FileVideo, Music } from 'lucide-react';
+import AISlashCommand from './AISlashCommand';
 
 import '../../styles/editor.css';
 
@@ -217,6 +218,7 @@ export default function BlockEditor({ noteId }: BlockEditorProps) {
         </div>
 
         {/* Actual Editor Content */}
+        <AISlashCommand editor={editor} />
         <EditorContent editor={editor} />
       </div>
     </div>

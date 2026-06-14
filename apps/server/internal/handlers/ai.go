@@ -347,6 +347,28 @@ func AIChatWithNotes(c *gin.Context) {
 	streamResponse(c, outChan, errChan)
 }
 
+// AIChat provides a direct chat endpoint without RAG context.
+func AIChat(c *gin.Context) {
+	var input struct {
+		Prompt string `json:"prompt" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	userID := middleware.GetUserID(c)
+	provider := getLLMProvider(userID)
+
+	reply, err := provider.Generate(input.Prompt)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"reply": reply})
+}
+
 // --- Helper ---
 
 func logAIUsage(userID, actionType string) {

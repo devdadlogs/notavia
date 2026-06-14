@@ -107,4 +107,13 @@ export const aiService = {
     const { data } = await api.post<{ results: any[] }>('/ai/sprout', { noteId, content });
     return data.results || [];
   },
+
+  // Direct generic chat
+  chat: async (prompt: string): Promise<{ text: string }> => {
+    // If backend doesn't have a direct /ai/chat, we can proxy it through /ai/chat-with-notes but bypassing vector if possible
+    // Or we just use a generic endpoint if it exists. 
+    // Wait, let's see if the backend has /ai/chat. If not, I'll add it to the backend too.
+    const { data } = await api.post<{ reply: string }>('/ai/chat', { prompt });
+    return { text: data.reply };
+  },
 };

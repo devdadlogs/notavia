@@ -111,6 +111,7 @@ func main() {
 			ai.POST("/suggest-tags", handlers.AISuggestTags)
 			ai.POST("/sprout", handlers.AISprout)
 			ai.POST("/chat-with-notes", handlers.AIChatWithNotes)
+			ai.POST("/chat", handlers.AIChat)
 		}
 	}
 

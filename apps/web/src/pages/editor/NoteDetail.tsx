@@ -16,6 +16,7 @@ import { ChevronLeft, Gift, MoreVertical, Play, FastForward, Edit3, Sparkles, Me
 import { useUIStore } from '../../stores/uiStore';
 import AIPanel from '../../components/editor/AIPanel';
 import EditorToolbar from '../../components/editor/EditorToolbar';
+import AISlashCommand from '../../components/editor/AISlashCommand';
 import { BlockHoverControls } from '../../components/editor/BlockHoverControls';
 import { aiService } from '../../services/ai';
 
@@ -423,6 +424,7 @@ export default function NoteDetail() {
             <div>
               <EditorToolbar editor={editor} noteTitle={title} />
               <BlockHoverControls editor={editor} />
+              <AISlashCommand editor={editor} />
               <div style={{ width: '100%' }}>
                 <EditorContent editor={editor} />
               </div>

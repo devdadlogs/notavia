@@ -83,7 +83,7 @@ func (s *QdrantService) UpsertNoteChunks(userID, noteID, title string, chunks []
 	}
 	
 	body, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/collections/%s/points", s.baseURL, s.collection), bytes.NewReader(body))
+	req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/collections/%s/points?wait=true", s.baseURL, s.collection), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	
 	resp, err := http.DefaultClient.Do(req)
@@ -115,7 +115,7 @@ func (s *QdrantService) DeleteNotesByNoteID(noteID string) error {
 	}
 
 	body, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/collections/%s/points/delete", s.baseURL, s.collection), bytes.NewReader(body))
+	req, _ := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/collections/%s/points/delete?wait=true", s.baseURL, s.collection), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
@@ -147,7 +147,7 @@ func (s *QdrantService) DeleteAllNotesByUserID(userID string) error {
 	}
 
 	body, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/collections/%s/points/delete", s.baseURL, s.collection), bytes.NewReader(body))
+	req, _ := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/collections/%s/points/delete?wait=true", s.baseURL, s.collection), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
@@ -196,7 +196,10 @@ func (s *QdrantService) SearchRelatedNotes(userID string, queryEmbedding []float
 	if excludeNoteID != "" {
 		filter["must_not"] = []map[string]interface{}{
 			{
-				"has_id": []string{excludeNoteID},
+				"key": "noteId",
+				"match": map[string]interface{}{
+					"value": excludeNoteID,
+				},
 			},
 		}
 	}

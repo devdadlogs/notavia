@@ -41,7 +41,7 @@ type UpdateNoteInput struct {
 func ReindexNotes(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var notes []models.Note
-	if err := config.DB.Where("user_id = ? AND content_text != '' AND is_trashed = ?", userID, false).Find(&notes).Error; err != nil {
+	if err := config.DB.Where("user_id = ? AND (content_text != '' OR transcript != '') AND is_trashed = ?", userID, false).Find(&notes).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch notes"})
 		return
 	}
@@ -53,7 +53,14 @@ func ReindexNotes(c *gin.Context) {
 
 	// Run synchronously to ensure progress is tracked and completed before returning
 	for _, note := range notes {
-		indexNoteInVectorDB(userID, note.ID, note.Title, note.ContentText)
+		indexText := note.ContentText
+		if note.Transcript != "" {
+			indexText += "\n\n录音内容:\n" + note.Transcript
+		}
+		if note.TranscriptSummary != "" {
+			indexText += "\n\n录音摘要:\n" + note.TranscriptSummary
+		}
+		indexNoteInVectorDB(userID, note.ID, note.Title, indexText)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Reindexing completed", "count": len(notes)})
@@ -177,8 +184,15 @@ func UpdateNote(c *gin.Context) {
 	// Return fresh copy
 	config.DB.First(&note, "id = ?", noteID)
 
-	// Update vector DB
-	go indexNoteInVectorDB(userID, note.ID, note.Title, note.ContentText)
+	// Update vector DB with text and transcript
+	indexText := note.ContentText
+	if note.Transcript != "" {
+		indexText += "\n\n录音内容:\n" + note.Transcript
+	}
+	if note.TranscriptSummary != "" {
+		indexText += "\n\n录音摘要:\n" + note.TranscriptSummary
+	}
+	go indexNoteInVectorDB(userID, note.ID, note.Title, indexText)
 
 	c.JSON(http.StatusOK, note)
 }
@@ -251,6 +265,19 @@ func UploadAudio(c *gin.Context) {
 		summary, err := textProvider.Generate(summaryPrompt)
 		if err == nil {
 			config.DB.Model(&models.Note{}).Where("id = ?", nID).Update("transcript_summary", summary)
+		}
+
+		// Reindex note in Vector DB now that transcription is complete
+		var fullNote models.Note
+		if err := config.DB.First(&fullNote, "id = ?", nID).Error; err == nil {
+			indexText := fullNote.ContentText
+			if transcript != "" {
+				indexText += "\n\n录音内容:\n" + transcript
+			}
+			if summary != "" {
+				indexText += "\n\n录音摘要:\n" + summary
+			}
+			go indexNoteInVectorDB(uID, nID, fullNote.Title, indexText)
 		}
 	}(noteID, userID, filePath)
 

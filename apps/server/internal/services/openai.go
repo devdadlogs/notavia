@@ -410,5 +410,5 @@ func formatVTT(vtt string) string {
 		return vtt // return original if parsing failed
 	}
 	
-	return strings.Join(result, "\n\n")
+	return strings.Join(result, "\n")
 }

@@ -332,7 +332,7 @@ func AIChatWithNotes(c *gin.Context) {
 		}
 
 		// 2. Search related notes
-		results, err := getQdrantService().SearchRelatedNotes(userID, embedding, 5, "")
+		results, err := getQdrantService().SearchRelatedNotes(userID, embedding, 15, "")
 		if err != nil {
 			errChan <- fmt.Errorf("failed to search notes: %w", err)
 			return

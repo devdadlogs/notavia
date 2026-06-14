@@ -42,6 +42,7 @@ export default function NoteDetail() {
   const [isSprouting, setIsSprouting] = useState(false);
   const [isEditingTranscript, setIsEditingTranscript] = useState(false);
   const [editTranscriptText, setEditTranscriptText] = useState("");
+  const [appendText, setAppendText] = useState("");
   
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -290,7 +291,7 @@ export default function NoteDetail() {
     ],
     onUpdate: ({ editor }) => {
       // Debounced save to traditional DB for fallback/search
-      saveNoteContent(editor.getJSON(), editor.getText());
+      saveNoteContent(editor.getJSON(), editor.getText({ blockSeparator: '\n' }));
     }
   });
 
@@ -677,10 +678,25 @@ export default function NoteDetail() {
           {activeTab === 'append' && (
             <div className="fade-in" style={{ padding: '24px 0' }}>
               <textarea 
+                value={appendText}
+                onChange={(e) => setAppendText(e.target.value)}
                 placeholder="在此输入追加内容..." 
-                style={{ width: '100%', minHeight: '200px', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-panel)', outline: 'none', resize: 'none' }}
+                style={{ width: '100%', minHeight: '200px', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-panel)', outline: 'none', resize: 'none', fontFamily: 'inherit', fontSize: '14px', lineHeight: '1.6' }}
               />
-              <button className="btn btn-primary" style={{ marginTop: '16px' }}>保存追加</button>
+              <button 
+                className="btn btn-primary" 
+                style={{ marginTop: '16px' }}
+                disabled={!appendText.trim()}
+                onClick={() => {
+                  if (!editor || !appendText.trim()) return;
+                  // Append to the end of the document while preserving newlines
+                  const formattedContent = appendText.split('\n').map(line => `<p>${line}</p>`).join('');
+                  editor.chain().focus().insertContentAt(editor.state.doc.content.size, `<p></p>${formattedContent}`).run();
+                  setAppendText("");
+                  setActiveTab('note');
+                  window.scrollTo(0, 0);
+                }}
+              >保存追加</button>
             </div>
           )}
         </div>
@@ -688,7 +704,7 @@ export default function NoteDetail() {
 
       {/* Detail Page Floating Action Bar */}
       <div className="floating-action-bar" style={{ gap: '24px', padding: '16px 32px' }}>
-        <button className="fab-btn">
+        <button className="fab-btn" onClick={() => { setActiveTab('append'); window.scrollTo(0, 0); }}>
           <MessageSquarePlus size={20} />
           <span>追加笔记</span>
         </button>

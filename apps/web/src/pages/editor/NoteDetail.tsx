@@ -11,7 +11,8 @@ import Highlight from '@tiptap/extension-highlight';
 import { ResizableImage } from '../../components/editor/extensions/ResizableImage';
 import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
 import { Markdown } from 'tiptap-markdown';
-import api from '../../services/api';
+import api, { uploadFile } from '../../services/api';
+import { compressImage } from '../../utils/imageCompressor';
 import { ChevronLeft, Gift, MoreVertical, Play, FastForward, Edit3, Sparkles, MessageSquarePlus, Menu, Wifi, WifiOff, Loader2, Pause, Volume2, Mic } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
 import AIPanel from '../../components/editor/AIPanel';
@@ -289,6 +290,52 @@ export default function NoteDetail() {
       saveTimeoutRef.current = setTimeout(() => {
         saveNoteContent(editor.getJSON(), editor.getText({ blockSeparator: '\n' }));
       }, 1000); // 1-second debounce
+    },
+    editorProps: {
+      handleDrop: (view, event, slice, moved) => {
+        if (!moved && event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0]) {
+          const file = event.dataTransfer.files[0];
+          if (file.type.startsWith('image/')) {
+            event.preventDefault();
+            
+            // Compress and upload
+            compressImage(file, { maxWidth: 1920, maxHeight: 1080, quality: 0.8 })
+              .then(uploadFile)
+              .then((url) => {
+                const { schema } = view.state;
+                const coordinates = view.posAtCoords({ left: event.clientX, top: event.clientY });
+                const node = schema.nodes.resizableImage.create({ src: url });
+                if (coordinates) {
+                  const tr = view.state.tr.insert(coordinates.pos, node);
+                  view.dispatch(tr);
+                }
+              })
+              .catch(err => console.error("Image upload failed:", err));
+            return true;
+          }
+        }
+        return false;
+      },
+      handlePaste: (view, event, slice) => {
+        if (event.clipboardData && event.clipboardData.files && event.clipboardData.files[0]) {
+          const file = event.clipboardData.files[0];
+          if (file.type.startsWith('image/')) {
+            event.preventDefault();
+            
+            compressImage(file, { maxWidth: 1920, maxHeight: 1080, quality: 0.8 })
+              .then(uploadFile)
+              .then((url) => {
+                const { schema } = view.state;
+                const node = schema.nodes.resizableImage.create({ src: url });
+                const tr = view.state.tr.replaceSelectionWith(node);
+                view.dispatch(tr);
+              })
+              .catch(err => console.error("Image paste upload failed:", err));
+            return true;
+          }
+        }
+        return false;
+      }
     }
   });
 

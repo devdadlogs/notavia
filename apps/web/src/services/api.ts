@@ -19,5 +19,20 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+export const uploadFile = async (file: File): Promise<string> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  const response = await api.post('/files/upload', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+  
+  // URL returned is usually like "/uploads/filename.jpg"
+  // If the backend runs on a different port, prepend the API base URL domain
+  const baseURL = api.defaults.baseURL?.replace('/api', '') || 'http://localhost:3001';
+  return baseURL + response.data.url;
+};
 
 export default api;

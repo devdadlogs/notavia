@@ -328,7 +328,7 @@ export default function EditorToolbar({ editor, noteTitle }: ToolbarProps) {
         gap: '2px', padding: '6px 12px',
         borderBottom: '1px solid var(--border-color)',
         background: 'var(--bg-panel)',
-        position: 'sticky', top: 0, zIndex: 50,
+        position: 'sticky', top: '65px', zIndex: 49,
       }}>
         <HeadingDropdown editor={editor} />
         <ToolbarSep />

@@ -275,7 +275,11 @@ export default function NoteDetail() {
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-panel)', position: 'relative' }}>
       
       {/* Top Header */}
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderBottom: '1px solid var(--border-color)' }}>
+      <header style={{ 
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', 
+        borderBottom: '1px solid var(--border-color)', position: 'sticky', top: 0, zIndex: 50, 
+        backgroundColor: 'var(--bg-panel)' 
+      }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <button onClick={toggleSidebar} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-primary)' }}>
             <Menu size={24} />

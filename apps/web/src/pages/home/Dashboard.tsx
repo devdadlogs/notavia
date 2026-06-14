@@ -356,7 +356,11 @@ export default function Dashboard() {
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-color)', position: 'relative' }}>
       
       {/* Top Header */}
-      <header style={{ display: 'flex', alignItems: 'center', padding: '16px 32px', gap: '24px' }}>
+      <header style={{ 
+        display: 'flex', alignItems: 'center', padding: '16px 32px', gap: '24px',
+        position: 'sticky', top: 0, zIndex: 50, backgroundColor: 'var(--bg-color)',
+        backdropFilter: 'blur(8px)'
+      }}>
         <button onClick={toggleSidebar} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-primary)' }}>
           <Menu size={24} />
         </button>

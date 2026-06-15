@@ -154,9 +154,29 @@ export default function NoteDetail() {
     }
   };
 
-  const handleSprout = () => {
+  const handleSprout = async () => {
     setActiveTab('note');
+    if (!editor) return;
+
+    const text = editor.getText({ blockSeparator: '\n' });
+    if (text.length < 50) {
+      alert("🌱 笔记内容太短啦！再多写一点（至少 50 字），AI 才能准确感知你的思想，为你跨越时空召回相关的灵感。");
+      return;
+    }
+
+    // Scroll to bottom where results will appear
     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+
+    // Manually trigger a fresh sprout calculation
+    setIsSprouting(true);
+    try {
+      const results = await aiService.sprout(id!, text);
+      setSproutResults(results);
+    } catch (err) {
+      console.error('Manual sprout failed', err);
+    } finally {
+      setIsSprouting(false);
+    }
   };
 
   // 1. Initialize Yjs Document
@@ -672,16 +692,16 @@ export default function NoteDetail() {
               <div style={{ width: '100%' }}>
                 <EditorContent editor={editor} />
               </div>
-              {/* Auto Sprout Recommendations (Smart Bi-linking) */}
+              {/* Auto Sprout Recommendations */}
               {editor && editor.getText().length > 50 && (
                 <div className="fade-in" style={{ marginTop: '64px', paddingTop: '32px', borderTop: '1px dashed var(--border-color)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', color: 'var(--text-tertiary)' }}>
-                    <Sparkles size={16} />
-                    <span style={{ fontSize: '13px', fontWeight: 500 }}>智能关联推荐 (Smart Bi-linking)</span>
+                    <Sparkles size={16} color="var(--accent-color)" />
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--accent-color)' }}>灵感发芽 (相关笔记)</span>
                   </div>
                   {isSprouting ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-tertiary)', fontSize: '13px' }}>
-                      <Loader2 size={14} className="spin" /> 正在思考...
+                      <Loader2 size={14} className="spin" /> 正在深入你的知识库为你寻找共鸣...
                     </div>
                   ) : uniqueSprouts.length > 0 ? (
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
@@ -787,20 +807,33 @@ export default function NoteDetail() {
         </div>
       </main>
 
-      {/* Detail Page Floating Action Bar */}
-      <div className="floating-action-bar" style={{ gap: '24px', padding: '16px 32px' }}>
-        <button className="fab-btn" onClick={() => setShowAIPanel(true)}>
-          <Edit3 size={20} />
-          <span>AI助手</span>
-        </button>
-        <div style={{ position: 'relative' }}>
-          <div style={{ position: 'absolute', top: '-12px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#fef3c7', color: '#b45309', fontSize: '9px', padding: '2px 6px', borderRadius: '4px', whiteSpace: 'nowrap' }}>本地AI</div>
-          <button className="fab-btn active" style={{ color: 'var(--accent-color)' }} onClick={handleSprout}>
-            <Sparkles size={20} />
-            <span>发芽</span>
-          </button>
-        </div>
-      </div>
+      {/* AI Assistant Side Button */}
+      <button 
+        onClick={() => setShowAIPanel(true)}
+        style={{
+          position: 'fixed',
+          right: '32px',
+          bottom: '40px',
+          backgroundColor: 'var(--bg-panel)',
+          color: 'var(--accent-color)',
+          border: '1px solid var(--border-color)',
+          borderRadius: '50%',
+          width: '52px',
+          height: '52px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxShadow: '0 8px 30px rgba(0,0,0,0.08)',
+          cursor: 'pointer',
+          zIndex: 40,
+          transition: 'all 0.2s ease'
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 40px rgba(0,0,0,0.12)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 8px 30px rgba(0,0,0,0.08)'; }}
+        title="唤醒 AI 助手"
+      >
+        <Sparkles size={24} />
+      </button>
 
       {/* AI Panel Overlay + Drawer */}
       <div className="ai-overlay" style={{ display: showAIPanel ? 'block' : 'none' }} onClick={() => setShowAIPanel(false)} />

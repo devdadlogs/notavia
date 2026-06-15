@@ -660,7 +660,6 @@ export default function NoteDetail() {
         <div className="note-tabs">
           <div className={`note-tab ${activeTab === 'transcript' ? 'active' : ''}`} onClick={() => setActiveTab('transcript')}>录音原文</div>
           <div className={`note-tab ${activeTab === 'note' ? 'active' : ''}`} onClick={() => setActiveTab('note')}>笔记内容</div>
-          <div className={`note-tab ${activeTab === 'append' ? 'active' : ''}`} onClick={() => setActiveTab('append')}>追加笔记</div>
         </div>
 
         {/* Tab Content Area */}
@@ -785,39 +784,11 @@ export default function NoteDetail() {
               )}
             </div>
           )}
-          {activeTab === 'append' && (
-            <div className="fade-in" style={{ padding: '24px 0' }}>
-              <textarea 
-                value={appendText}
-                onChange={(e) => setAppendText(e.target.value)}
-                placeholder="在此输入追加内容..." 
-                style={{ width: '100%', minHeight: '200px', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-panel)', outline: 'none', resize: 'none', fontFamily: 'inherit', fontSize: '14px', lineHeight: '1.6' }}
-              />
-              <button 
-                className="btn btn-primary" 
-                style={{ marginTop: '16px' }}
-                disabled={!appendText.trim()}
-                onClick={() => {
-                  if (!editor || !appendText.trim()) return;
-                  // Append to the end of the document while preserving newlines
-                  const formattedContent = appendText.split('\n').map(line => `<p>${line}</p>`).join('');
-                  editor.chain().focus().insertContentAt(editor.state.doc.content.size, `<p></p>${formattedContent}`).run();
-                  setAppendText("");
-                  setActiveTab('note');
-                  window.scrollTo(0, 0);
-                }}
-              >保存追加</button>
-            </div>
-          )}
         </div>
       </main>
 
       {/* Detail Page Floating Action Bar */}
       <div className="floating-action-bar" style={{ gap: '24px', padding: '16px 32px' }}>
-        <button className="fab-btn" onClick={() => { setActiveTab('append'); window.scrollTo(0, 0); }}>
-          <MessageSquarePlus size={20} />
-          <span>追加笔记</span>
-        </button>
         <button className="fab-btn" onClick={() => setShowAIPanel(true)}>
           <Edit3 size={20} />
           <span>AI助手</span>

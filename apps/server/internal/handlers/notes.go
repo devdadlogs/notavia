@@ -41,6 +41,146 @@ type UpdateNoteInput struct {
 
 // --- Handlers ---
 
+func ImportNotes(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No file uploaded"})
+		return
+	}
+
+	file, err := fileHeader.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to open file"})
+		return
+	}
+	defer file.Close()
+
+	var importedCount int
+
+	if strings.HasSuffix(strings.ToLower(fileHeader.Filename), ".zip") {
+		zipReader, err := zip.NewReader(file, fileHeader.Size)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid zip file"})
+			return
+		}
+
+		notebookCache := make(map[string]string)
+
+		for _, f := range zipReader.File {
+			if f.FileInfo().IsDir() {
+				continue
+			}
+			if strings.Contains(f.Name, "__MACOSX") {
+				continue
+			}
+
+			ext := strings.ToLower(f.Name[strings.LastIndex(f.Name, "."):])
+			if ext != ".md" && ext != ".txt" && ext != ".markdown" {
+				continue
+			}
+
+			parts := strings.Split(f.Name, "/")
+			var notebookID *string
+			if len(parts) > 1 {
+				nbName := parts[0]
+				if id, exists := notebookCache[nbName]; exists {
+					notebookID = &id
+				} else {
+					var nb models.Notebook
+					if err := config.DB.Where("user_id = ? AND name = ?", userID, nbName).First(&nb).Error; err != nil {
+						nb = models.Notebook{
+							ID:     uuid.New().String(),
+							UserID: userID,
+							Name:   nbName,
+						}
+						config.DB.Create(&nb)
+					}
+					notebookCache[nbName] = nb.ID
+					notebookID = &nb.ID
+				}
+			}
+
+			filename := parts[len(parts)-1]
+			title := strings.TrimSuffix(filename, ext)
+
+			rc, err := f.Open()
+			if err != nil {
+				continue
+			}
+			contentBytes, err := io.ReadAll(rc)
+			rc.Close()
+			if err != nil {
+				continue
+			}
+
+			content := string(contentBytes)
+			
+			// Try to build a valid minimal tiptap json. It's safer to just split by newline and wrap in paragraphs.
+			paragraphs := []string{}
+			lines := strings.Split(content, "\n")
+			for _, line := range lines {
+				cleanLine := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(line, "\\", "\\\\"), "\"", "\\\""), "\r", "")
+				if cleanLine != "" {
+					paragraphs = append(paragraphs, `{"type":"paragraph","content":[{"type":"text","text":"`+cleanLine+`"}]}`)
+				} else {
+					paragraphs = append(paragraphs, `{"type":"paragraph"}`)
+				}
+			}
+			contentJSON := `{"type":"doc","content":[` + strings.Join(paragraphs, ",") + `]}`
+
+			note := models.Note{
+				ID:          uuid.New().String(),
+				UserID:      userID,
+				Title:       title,
+				NotebookID:  notebookID,
+				ContentText: content,
+				ContentJSON: contentJSON,
+			}
+
+			if err := config.DB.Create(&note).Error; err == nil {
+				importedCount++
+				go indexNoteInVectorDB(userID, note.ID, note.Title, note.ContentText)
+			}
+		}
+	} else {
+		// Single Markdown file import
+		ext := strings.ToLower(fileHeader.Filename[strings.LastIndex(fileHeader.Filename, "."):])
+		if ext == ".md" || ext == ".txt" || ext == ".markdown" {
+			title := strings.TrimSuffix(fileHeader.Filename, ext)
+			contentBytes, _ := io.ReadAll(file)
+			content := string(contentBytes)
+
+			paragraphs := []string{}
+			lines := strings.Split(content, "\n")
+			for _, line := range lines {
+				cleanLine := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(line, "\\", "\\\\"), "\"", "\\\""), "\r", "")
+				if cleanLine != "" {
+					paragraphs = append(paragraphs, `{"type":"paragraph","content":[{"type":"text","text":"`+cleanLine+`"}]}`)
+				} else {
+					paragraphs = append(paragraphs, `{"type":"paragraph"}`)
+				}
+			}
+			contentJSON := `{"type":"doc","content":[` + strings.Join(paragraphs, ",") + `]}`
+
+			note := models.Note{
+				ID:          uuid.New().String(),
+				UserID:      userID,
+				Title:       title,
+				ContentText: content,
+				ContentJSON: contentJSON,
+			}
+			if err := config.DB.Create(&note).Error; err == nil {
+				importedCount++
+				go indexNoteInVectorDB(userID, note.ID, note.Title, note.ContentText)
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Import completed", "count": importedCount})
+}
+
 func ExportNotes(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var notes []models.Note

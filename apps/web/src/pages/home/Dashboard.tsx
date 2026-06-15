@@ -395,7 +395,7 @@ export default function Dashboard() {
 
         {/* Web Clipper */}
         <div style={{ marginBottom: '40px' }}>
-          <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>链接一键记 & 导入文件</h2>
+          <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px' }}>AI 链接速记</h2>
           <div style={{ display: 'flex', gap: '12px' }}>
             <input 
               type="url" 
@@ -412,11 +412,6 @@ export default function Dashboard() {
             >
               {isClipping ? <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Loader2 size={16} className="spin" /> 提取中</span> : '开始提取'}
             </button>
-            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '0 16px', cursor: 'pointer', color: 'var(--text-secondary)', transition: 'all 0.2s', gap: '8px' }} className="btn-hover-effect">
-              {isImporting ? <Loader2 size={16} className="spin" /> : <Download size={16} />}
-              <span style={{ fontSize: '14px', whiteSpace: 'nowrap' }}>导入文件</span>
-              <input type="file" accept=".txt,.md,.markdown,.html,.htm,.docx,.pdf,.xlsx,.xls,.csv,.png,.jpg,.jpeg,.gif,.webp" onChange={handleFileUpload} style={{ display: 'none' }} disabled={isImporting} />
-            </label>
           </div>
         </div>
 

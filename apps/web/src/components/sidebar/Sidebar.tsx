@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import api from '../../services/api';
 import { 
-  Calendar, FileText, BarChart2, Folder, BookOpen, Mic, Trash2, ChevronRight, Gift, Settings, Search, Download
+  Calendar, FileText, BarChart2, Folder, BookOpen, Mic, Trash2, ChevronRight, Gift, Settings, Search, Download, Upload
 } from 'lucide-react';
 import SettingsModal from '../ui/SettingsModal';
 import GlobalAIChat from '../ui/GlobalAIChat';
@@ -17,6 +17,33 @@ export default function Sidebar() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAIChatOpen, setIsAIChatOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      setIsImporting(true);
+      const { data } = await api.post('/notes/import', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      alert(`导入成功！共导入 ${data.count} 篇笔记。`);
+      // Force reload stats/dashboard by triggering navigation or state
+      window.location.reload(); 
+    } catch (err) {
+      console.error('Import failed', err);
+      alert('导入失败，请检查文件格式');
+    } finally {
+      setIsImporting(false);
+      if (e.target) {
+        e.target.value = ''; // Reset input
+      }
+    }
+  };
 
   const handleExport = async () => {
     try {
@@ -159,15 +186,25 @@ export default function Sidebar() {
 
       {/* Footer Settings / Logout */}
       <div style={{ marginTop: 'auto', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <button 
-          className="btn btn-outline" 
-          onClick={handleExport} 
-          disabled={isExporting}
-          style={{ width: '100%', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-        >
-          <Download size={14} />
-          {isExporting ? '正在打包...' : '导出全部笔记'}
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <label 
+            className="btn btn-outline" 
+            style={{ flex: 1, fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', cursor: 'pointer', padding: '8px 0', opacity: isImporting ? 0.7 : 1 }}
+          >
+            <Download size={14} />
+            {isImporting ? '导入中...' : '导入'}
+            <input type="file" accept=".zip,.md,.txt,.markdown" style={{ display: 'none' }} onChange={handleImport} disabled={isImporting} />
+          </label>
+          <button 
+            className="btn btn-outline" 
+            onClick={handleExport} 
+            disabled={isExporting}
+            style={{ flex: 1, fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '8px 0' }}
+          >
+            <Upload size={14} />
+            {isExporting ? '打包中...' : '导出'}
+          </button>
+        </div>
         <button className="btn btn-outline" onClick={logout} style={{ width: '100%', fontSize: '12px', color: 'var(--text-secondary)' }}>
           退出登录
         </button>

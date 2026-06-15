@@ -87,6 +87,8 @@ func main() {
 			notes.DELETE("/:id", handlers.TrashNote)
 			notes.DELETE("/:id/permanent", handlers.DeleteNotePermanent)
 			notes.POST("/:id/audio", handlers.UploadAudio)
+			notes.POST("/:id/tags", handlers.AddTagToNote)
+			notes.DELETE("/:id/tags/:tagId", handlers.RemoveTagFromNote)
 		}
 
 		// Notebooks

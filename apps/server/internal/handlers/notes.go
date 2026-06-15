@@ -402,6 +402,59 @@ func UpdateNote(c *gin.Context) {
 	c.JSON(http.StatusOK, note)
 }
 
+func AddTagToNote(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	noteID := c.Param("id")
+
+	var input struct {
+		Name string `json:"name" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Find or Create Tag
+	var tag models.Tag
+	if err := config.DB.Where("user_id = ? AND name = ?", userID, input.Name).First(&tag).Error; err != nil {
+		tag = models.Tag{
+			ID:     uuid.New().String(),
+			UserID: userID,
+			Name:   input.Name,
+		}
+		if err := config.DB.Create(&tag).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create tag"})
+			return
+		}
+	}
+
+	// Create NoteTag relation
+	noteTag := models.NoteTag{
+		NoteID: noteID,
+		TagID:  tag.ID,
+	}
+	// Ignore if already exists
+	config.DB.Where("note_id = ? AND tag_id = ?", noteID, tag.ID).FirstOrCreate(&noteTag)
+
+	c.JSON(http.StatusOK, tag)
+}
+
+func RemoveTagFromNote(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	noteID := c.Param("id")
+	tagID := c.Param("tagId")
+
+	// Ensure user owns the note
+	var note models.Note
+	if err := config.DB.Where("id = ? AND user_id = ?", noteID, userID).First(&note).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Note not found"})
+		return
+	}
+
+	config.DB.Where("note_id = ? AND tag_id = ?", noteID, tagID).Delete(&models.NoteTag{})
+	c.JSON(http.StatusOK, gin.H{"message": "Tag removed"})
+}
+
 func TrashNote(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	noteID := c.Param("id")

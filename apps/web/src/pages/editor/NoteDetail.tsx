@@ -35,6 +35,32 @@ export default function NoteDetail() {
   const toggleSidebar = useUIStore(state => state.toggleSidebar);
   const [isSaving, setIsSaving] = useState(false);
   const [noteData, setNoteData] = useState<any>(null);
+  const [isAddingTag, setIsAddingTag] = useState(false);
+
+  const handleAddTag = async (tagName: string) => {
+    try {
+      const { data } = await api.post(`/notes/${id}/tags`, { name: tagName });
+      // Update local state without waiting for full reload
+      setNoteData((prev: any) => ({
+        ...prev,
+        tags: [...(prev?.tags || []), { tag: data, tagId: data.id }]
+      }));
+    } catch (err) {
+      console.error('Failed to add tag', err);
+    }
+  };
+
+  const removeTag = async (tagId: string) => {
+    try {
+      await api.delete(`/notes/${id}/tags/${tagId}`);
+      setNoteData((prev: any) => ({
+        ...prev,
+        tags: prev?.tags?.filter((t: any) => (t.tagId || t.id) !== tagId) || []
+      }));
+    } catch (err) {
+      console.error('Failed to remove tag', err);
+    }
+  };
   const [title, setTitle] = useState('');
   const [activeTab, setActiveTab] = useState('note');
   const [showAIPanel, setShowAIPanel] = useState(false);
@@ -574,11 +600,47 @@ export default function NoteDetail() {
             
             {/* Sync State Indicator (Moved to top right header) */}
           </div>
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
-            <span className="btn btn-outline text-xs" style={{ padding: '2px 8px' }}>+</span>
-            {noteData.tags && noteData.tags.map((t: any) => (
-              <span key={t.tagId || t.id} className="note-tag">{t.tag?.name || t.name || '标签'}</span>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap', alignItems: 'center' }}>
+            {noteData?.tags?.map((t: any) => (
+              <span key={t.tagId || t.id} className="note-tag" style={{ gap: '6px' }}>
+                {t.tag?.name || t.name || '标签'}
+                <button 
+                  onClick={(e) => { e.stopPropagation(); removeTag(t.tagId || t.id); }} 
+                  style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+              </span>
             ))}
+            {isAddingTag ? (
+              <input 
+                autoFocus
+                type="text"
+                placeholder="输入标签..."
+                className="note-tag"
+                style={{ outline: 'none', backgroundColor: '#fff', border: '1px solid var(--border-color)', minWidth: '80px', height: '25px', padding: '0 12px' }}
+                onKeyDown={async (e) => {
+                  if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                    await handleAddTag(e.currentTarget.value.trim());
+                    setIsAddingTag(false);
+                  } else if (e.key === 'Escape') {
+                    setIsAddingTag(false);
+                  }
+                }}
+                onBlur={(e) => {
+                  if (e.currentTarget.value.trim()) handleAddTag(e.currentTarget.value.trim());
+                  setIsAddingTag(false);
+                }}
+              />
+            ) : (
+              <button 
+                className="note-tag" 
+                style={{ background: 'transparent', border: '1px dashed var(--border-color)', cursor: 'pointer', color: 'var(--text-tertiary)' }} 
+                onClick={() => setIsAddingTag(true)}
+              >
+                + 添加标签
+              </button>
+            )}
           </div>
 
           {/* Audio Player Area */}

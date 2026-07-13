@@ -13,6 +13,7 @@ type Config struct {
 	DBDSN      string // PostgreSQL connection string
 	JWTSecret  string
 	OllamaURL  string
+	QdrantURL  string
 	UploadDir  string
 	CORSOrigin string
 
@@ -21,7 +22,7 @@ type Config struct {
 	OpenAIBaseURL string
 	OpenAIKey     string
 	OpenAIModel   string
-	
+
 	WhisperBaseURL string
 	WhisperAPIKey  string
 	WhisperModel   string
@@ -40,13 +41,14 @@ func Load() {
 		DBDSN:      getEnv("DATABASE_URL", ""),
 		JWTSecret:  getEnv("JWT_SECRET", "notavia-dev-secret-change-in-production"),
 		OllamaURL:  getEnv("OLLAMA_URL", "http://localhost:11434"),
+		QdrantURL:  getEnv("QDRANT_URL", "http://localhost:6333"),
 		UploadDir:  getEnv("UPLOAD_DIR", "./data/uploads"),
 		CORSOrigin: getEnv("CORS_ORIGIN", "http://localhost:5173"),
 
-		LLMProvider:   getEnv("LLM_PROVIDER", "ollama"),
-		OpenAIBaseURL: getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-		OpenAIKey:     getEnv("OPENAI_API_KEY", ""),
-		OpenAIModel:   getEnv("OPENAI_MODEL", "gpt-4o-mini"),
+		LLMProvider:    getEnv("LLM_PROVIDER", "ollama"),
+		OpenAIBaseURL:  getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+		OpenAIKey:      getEnv("OPENAI_API_KEY", ""),
+		OpenAIModel:    getEnv("OPENAI_MODEL", "gpt-4o-mini"),
 		WhisperBaseURL: getEnv("WHISPER_BASE_URL", "http://localhost:9005/v1"),
 		WhisperAPIKey:  getEnv("WHISPER_API_KEY", ""),
 		WhisperModel:   getEnv("WHISPER_MODEL", "whisper-1"),

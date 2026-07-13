@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/notavia/server/internal/config"
 	"github.com/notavia/server/internal/middleware"
 	"github.com/notavia/server/internal/models"
+	"gorm.io/gorm"
 )
 
 // --- Request Structs ---
@@ -116,7 +118,7 @@ func ImportNotes(c *gin.Context) {
 			}
 
 			content := string(contentBytes)
-			
+
 			// Try to build a valid minimal tiptap json. It's safer to just split by newline and wrap in paragraphs.
 			paragraphs := []string{}
 			lines := strings.Split(content, "\n")
@@ -137,6 +139,7 @@ func ImportNotes(c *gin.Context) {
 				NotebookID:  notebookID,
 				ContentText: content,
 				ContentJSON: contentJSON,
+				SourceType:  "import",
 			}
 
 			if err := config.DB.Create(&note).Error; err == nil {
@@ -170,6 +173,7 @@ func ImportNotes(c *gin.Context) {
 				Title:       title,
 				ContentText: content,
 				ContentJSON: contentJSON,
+				SourceType:  "import",
 			}
 			if err := config.DB.Create(&note).Error; err == nil {
 				importedCount++
@@ -231,6 +235,27 @@ func ExportNotes(c *gin.Context) {
 		}
 
 		_, _ = io.WriteString(f, content)
+	}
+
+	// Include creator-domain data in a machine-readable snapshot so the user can
+	// leave Notavia without losing topic, citation, style, revision or publishing history.
+	var topics []models.Topic
+	var works []models.Work
+	var revisions []models.Revision
+	var publications []models.Publication
+	var insights []models.MaterialInsight
+	var style models.StyleProfile
+	config.DB.Where("user_id = ?", userID).Preload("Materials").Find(&topics)
+	config.DB.Where("user_id = ?", userID).Preload("Citations").Find(&works)
+	config.DB.Where("user_id = ?", userID).Find(&revisions)
+	config.DB.Where("user_id = ?", userID).Find(&publications)
+	config.DB.Where("user_id = ?", userID).Find(&insights)
+	config.DB.Where("user_id = ?", userID).First(&style)
+	snapshot := map[string]interface{}{"version": 1, "exportedAt": time.Now(), "materials": notes, "topics": topics, "works": works, "revisions": revisions, "publications": publications, "materialInsights": insights, "styleProfile": style}
+	if payload, err := json.MarshalIndent(snapshot, "", "  "); err == nil {
+		if f, err := zipWriter.Create("notavia-creator-data.json"); err == nil {
+			_, _ = f.Write(payload)
+		}
 	}
 }
 
@@ -482,9 +507,24 @@ func DeleteNotePermanent(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	noteID := c.Param("id")
 
-	result := config.DB.Where("id = ? AND user_id = ?", noteID, userID).Delete(&models.Note{})
-	if result.RowsAffected == 0 {
+	var note models.Note
+	if err := config.DB.Where("id = ? AND user_id = ?", noteID, userID).First(&note).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Note not found"})
+		return
+	}
+	if err := config.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.Citation{}).Where("note_id = ?", noteID).Updates(map[string]interface{}{"note_id": nil, "source_available": false}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("note_id = ?", noteID).Delete(&models.TopicMaterial{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("note_id = ?", noteID).Delete(&models.MaterialInsight{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&note).Error
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to permanently delete note"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "Note permanently deleted"})
@@ -492,9 +532,27 @@ func DeleteNotePermanent(c *gin.Context) {
 
 func EmptyTrash(c *gin.Context) {
 	userID := middleware.GetUserID(c)
-
-	result := config.DB.Where("user_id = ? AND is_trashed = ?", userID, true).Delete(&models.Note{})
-	c.JSON(http.StatusOK, gin.H{"message": "Trash emptied", "count": result.RowsAffected})
+	var notes []models.Note
+	config.DB.Where("user_id = ? AND is_trashed = ?", userID, true).Find(&notes)
+	err := config.DB.Transaction(func(tx *gorm.DB) error {
+		for _, note := range notes {
+			if err := tx.Model(&models.Citation{}).Where("note_id = ?", note.ID).Updates(map[string]interface{}{"note_id": nil, "source_available": false}).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("note_id = ?", note.ID).Delete(&models.TopicMaterial{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("note_id = ?", note.ID).Delete(&models.MaterialInsight{}).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Where("user_id = ? AND is_trashed = ?", userID, true).Delete(&models.Note{}).Error
+	})
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to empty trash"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Trash emptied", "count": len(notes)})
 }
 
 func UploadAudio(c *gin.Context) {
@@ -515,7 +573,7 @@ func UploadAudio(c *gin.Context) {
 	}
 
 	// Create uploads directory if not exists
-	uploadDir := "uploads/audio"
+	uploadDir := filepath.Join(config.AppConfig.UploadDir, "audio")
 	os.MkdirAll(uploadDir, 0755)
 
 	filePath := fmt.Sprintf("%s/%s-%s", uploadDir, noteID, file.Filename)
@@ -643,9 +701,9 @@ func WebClipper(c *gin.Context) {
 		contentHtml = contentSource.Text()
 	}
 	textContent := strings.TrimSpace(contentSource.Text())
-	
+
 	fmt.Printf("📝 Clipped content length: %d chars\n", len(textContent))
-	
+
 	if len(textContent) < 50 {
 		fmt.Printf("⚠️ Warning: Very short content extracted. Might be a SPA or blocked.\n")
 	}
@@ -690,7 +748,7 @@ func WebClipper(c *gin.Context) {
 
 	// 5. Parse AI Response
 	parsedResult := parseClipperAIResponse(aiResponse)
-	
+
 	// Format as HTML so Tiptap natively parses it nicely (bypassing naive JSON conversion)
 	finalHtml := fmt.Sprintf(`<h3>📝 网页剪藏摘要</h3>
 <p><strong>%s</strong></p>
@@ -704,7 +762,9 @@ func WebClipper(c *gin.Context) {
 		UserID:      userID,
 		Title:       title,
 		ContentJSON: "", // Empty triggers frontend HTML fallback
-		ContentText: finalHtml, 
+		ContentText: finalHtml,
+		SourceType:  "web",
+		SourceURL:   input.URL,
 	}
 
 	if err := config.DB.Create(&note).Error; err != nil {
@@ -726,12 +786,12 @@ func WebClipper(c *gin.Context) {
 
 func GetStats(c *gin.Context) {
 	userID := middleware.GetUserID(c)
-	
+
 	type DailyCount struct {
 		Date  string `json:"date"`
 		Count int    `json:"count"`
 	}
-	
+
 	var results []DailyCount
 	// Get counts of notes created per day for the last 90 days
 	// Using SQLite strftime for date grouping
@@ -741,7 +801,7 @@ func GetStats(c *gin.Context) {
 		WHERE user_id = ? AND created_at > date('now', '-90 days')
 		GROUP BY date
 	`, userID).Scan(&results)
-	
+
 	// Also get total count
 	var totalCount int64
 	config.DB.Model(&models.Note{}).Where("user_id = ? AND is_trashed = ?", userID, false).Count(&totalCount)
@@ -776,7 +836,7 @@ func indexNoteInVectorDB(userID, noteID, title, contentText string) {
 		}
 		chunkText := fmt.Sprintf("【笔记标题：%s】\n%s", title, string(runes[i:end]))
 		chunks = append(chunks, chunkText)
-		
+
 		embedding, err := getEmbeddingProvider().Embed(chunkText)
 		if err != nil {
 			fmt.Printf("Failed to embed chunk %d for note %s: %v\n", i/chunkSize, noteID, err)
@@ -793,7 +853,7 @@ func indexNoteInVectorDB(userID, noteID, title, contentText string) {
 // markdownToTiptapJSON converts a simple markdown string to Tiptap-compatible JSON.
 func markdownToTiptapJSON(md string) string {
 	type Node struct {
-		Type    string `json:"type"`
+		Type    string                 `json:"type"`
 		Attrs   map[string]interface{} `json:"attrs,omitempty"`
 		Content []interface{}          `json:"content,omitempty"`
 		Text    string                 `json:"text,omitempty"`
@@ -817,31 +877,31 @@ func markdownToTiptapJSON(md string) string {
 		var node Node
 		if strings.HasPrefix(line, "# ") {
 			node = Node{
-				Type:  "heading",
-				Attrs: map[string]interface{}{"level": 1},
+				Type:    "heading",
+				Attrs:   map[string]interface{}{"level": 1},
 				Content: []interface{}{Node{Type: "text", Text: line[2:]}},
 			}
 		} else if strings.HasPrefix(line, "## ") {
 			node = Node{
-				Type:  "heading",
-				Attrs: map[string]interface{}{"level": 2},
+				Type:    "heading",
+				Attrs:   map[string]interface{}{"level": 2},
 				Content: []interface{}{Node{Type: "text", Text: line[3:]}},
 			}
 		} else if strings.HasPrefix(line, "### ") {
 			node = Node{
-				Type:  "heading",
-				Attrs: map[string]interface{}{"level": 3},
+				Type:    "heading",
+				Attrs:   map[string]interface{}{"level": 3},
 				Content: []interface{}{Node{Type: "text", Text: line[4:]}},
 			}
 		} else if strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "* ") {
 			// Very simple bullet list item representation
 			node = Node{
-				Type: "paragraph",
+				Type:    "paragraph",
 				Content: []interface{}{Node{Type: "text", Text: "• " + line[2:]}},
 			}
 		} else {
 			node = Node{
-				Type: "paragraph",
+				Type:    "paragraph",
 				Content: []interface{}{Node{Type: "text", Text: line}},
 			}
 		}
@@ -851,4 +911,3 @@ func markdownToTiptapJSON(md string) string {
 	jsonData, _ := json.Marshal(doc)
 	return string(jsonData)
 }
-

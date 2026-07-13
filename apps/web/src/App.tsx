@@ -5,11 +5,11 @@ import { useAuthStore } from './stores/authStore';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import MainLayout from './components/layout/MainLayout';
-import Dashboard from './pages/home/Dashboard';
+import CreatorDashboard from './pages/creator/CreatorDashboard';
+import MaterialsPage from './pages/creator/MaterialsPage';
+import TopicWorkspace from './pages/creator/TopicWorkspace';
+import StyleProfilePage from './pages/creator/StyleProfilePage';
 import NoteDetail from './pages/editor/NoteDetail';
-import CalendarPage from './pages/features/Calendar';
-import DailyReport from './pages/features/DailyReport';
-import SproutReport from './pages/features/SproutReport';
 import Trash from './pages/features/Trash';
 
 function App() {
@@ -44,15 +44,15 @@ function App() {
         path="/" 
         element={isAuthenticated ? <MainLayout /> : <Navigate to="/auth/login" />} 
       >
-        <Route index element={<Dashboard />} />
+        <Route index element={<CreatorDashboard />} />
+        <Route path="materials" element={<MaterialsPage />} />
+        <Route path="style-profile" element={<StyleProfilePage />} />
         <Route path="n/:id" element={<NoteDetail key={location.pathname} />} />
-        <Route path="calendar" element={<CalendarPage />} />
-        <Route path="daily" element={<DailyReport />} />
-        <Route path="report" element={<SproutReport />} />
+        <Route path="editor/:id" element={<NoteDetail key={location.pathname} />} />
         <Route path="trash" element={<Trash />} />
-        {/* Placeholder routes for sidebar items */}
-        <Route path="*" element={<Dashboard />} />
+        <Route path="*" element={<CreatorDashboard />} />
       </Route>
+      <Route path="/topics/:id" element={isAuthenticated ? <TopicWorkspace /> : <Navigate to="/auth/login" />} />
     </Routes>
   );
 }

@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
+	"github.com/notavia/server/internal/config"
 )
 
 // YjsHub manages WebSocket connections for Yjs document synchronization.
@@ -19,7 +20,8 @@ type YjsHub struct {
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		return true // Allow all origins in dev; restrict in production
+		origin := r.Header.Get("Origin")
+		return origin == "" || origin == config.AppConfig.CORSOrigin
 	},
 }
 

@@ -50,6 +50,9 @@ func InitDB() {
 		&models.Tag{},
 		&models.NoteTag{},
 		&models.AiUsageLog{},
+		&models.Topic{}, &models.TopicMaterial{}, &models.Work{}, &models.Citation{},
+		&models.StyleProfile{}, &models.Revision{}, &models.Publication{}, &models.MaterialInsight{},
+		&models.UploadedFile{},
 	)
 	if err != nil {
 		log.Fatalf("Failed to auto-migrate: %v", err)

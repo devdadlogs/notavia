@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+	"github.com/notavia/server/internal/config"
 )
 
 // QdrantService handles communication with the Qdrant vector database.
@@ -18,7 +19,7 @@ type QdrantService struct {
 
 func NewQdrantService() *QdrantService {
 	return &QdrantService{
-		baseURL:    "http://localhost:6333",
+		baseURL:    config.AppConfig.QdrantURL,
 		collection: "notes",
 	}
 }
@@ -44,10 +45,10 @@ func (s *QdrantService) InitCollection() error {
 		},
 	}
 	body, _ := json.Marshal(reqBody)
-	
+
 	req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/collections/%s", s.baseURL, s.collection), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	createResp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
@@ -67,8 +68,8 @@ func (s *QdrantService) UpsertNoteChunks(userID, noteID, title string, chunks []
 	var points []map[string]interface{}
 	for i, chunk := range chunks {
 		points = append(points, map[string]interface{}{
-			"id":      uuid.New().String(),
-			"vector":  embeddings[i],
+			"id":     uuid.New().String(),
+			"vector": embeddings[i],
 			"payload": map[string]interface{}{
 				"userId":  userID,
 				"noteId":  noteID, // we need this to delete old chunks
@@ -77,15 +78,15 @@ func (s *QdrantService) UpsertNoteChunks(userID, noteID, title string, chunks []
 			},
 		})
 	}
-	
+
 	reqBody := map[string]interface{}{
 		"points": points,
 	}
-	
+
 	body, _ := json.Marshal(reqBody)
 	req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/collections/%s/points?wait=true", s.baseURL, s.collection), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
@@ -173,8 +174,8 @@ type SearchResult struct {
 
 func (s *QdrantService) SearchRelatedNotes(userID string, queryEmbedding []float32, limit int, excludeNoteID string) ([]SearchResult, error) {
 	reqBody := map[string]interface{}{
-		"vector": queryEmbedding,
-		"limit":  limit,
+		"vector":       queryEmbedding,
+		"limit":        limit,
 		"with_payload": true,
 	}
 
@@ -203,13 +204,13 @@ func (s *QdrantService) SearchRelatedNotes(userID string, queryEmbedding []float
 			},
 		}
 	}
-	
+
 	reqBody["filter"] = filter
 
 	body, _ := json.Marshal(reqBody)
 	req, _ := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/collections/%s/points/search", s.baseURL, s.collection), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err

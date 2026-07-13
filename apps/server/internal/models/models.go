@@ -54,27 +54,133 @@ type Notebook struct {
 }
 
 type Note struct {
-	ID          string    `json:"id" gorm:"primaryKey;type:varchar(36)"`
-	UserID      string    `json:"userId" gorm:"not null;index"`
-	NotebookID  *string   `json:"notebookId" gorm:"index"`
-	Title       string    `json:"title" gorm:"default:Untitled"`
-	ContentJSON string    `json:"contentJson" gorm:"type:text"`  // Tiptap JSON content stored as text
-	ContentText string    `json:"contentText" gorm:"type:text"`  // Plain text for full-text searching
-	CoverImage  string    `json:"coverImage"`
-	Icon        string    `json:"icon"`
-	AudioURL    string    `json:"audioUrl"`
-	Transcript  string    `json:"transcript" gorm:"type:text"`
-	TranscriptSummary string `json:"transcriptSummary" gorm:"type:text"`
-	WordCount   int       `json:"wordCount" gorm:"default:0"`
-	IsPinned    bool      `json:"isPinned" gorm:"default:false"`
-	IsTrashed   bool      `json:"isTrashed" gorm:"default:false"`
-	Version     int       `json:"version" gorm:"default:1"`
-	CreatedAt   time.Time `json:"createdAt" gorm:"autoCreateTime"`
-	UpdatedAt   time.Time `json:"updatedAt" gorm:"autoUpdateTime"`
+	ID                string    `json:"id" gorm:"primaryKey;type:varchar(36)"`
+	UserID            string    `json:"userId" gorm:"not null;index"`
+	NotebookID        *string   `json:"notebookId" gorm:"index"`
+	Title             string    `json:"title" gorm:"default:Untitled"`
+	ContentJSON       string    `json:"contentJson" gorm:"type:text"` // Tiptap JSON content stored as text
+	ContentText       string    `json:"contentText" gorm:"type:text"` // Plain text for full-text searching
+	CoverImage        string    `json:"coverImage"`
+	Icon              string    `json:"icon"`
+	AudioURL          string    `json:"audioUrl"`
+	Transcript        string    `json:"transcript" gorm:"type:text"`
+	TranscriptSummary string    `json:"transcriptSummary" gorm:"type:text"`
+	SourceType        string    `json:"sourceType" gorm:"default:'manual';index"`
+	SourceURL         string    `json:"sourceUrl" gorm:"type:text"`
+	WordCount         int       `json:"wordCount" gorm:"default:0"`
+	IsPinned          bool      `json:"isPinned" gorm:"default:false"`
+	IsTrashed         bool      `json:"isTrashed" gorm:"default:false"`
+	Version           int       `json:"version" gorm:"default:1"`
+	CreatedAt         time.Time `json:"createdAt" gorm:"autoCreateTime"`
+	UpdatedAt         time.Time `json:"updatedAt" gorm:"autoUpdateTime"`
 
 	User     User      `json:"-" gorm:"foreignKey:UserID"`
 	Notebook *Notebook `json:"notebook,omitempty" gorm:"foreignKey:NotebookID"`
 	Tags     []NoteTag `json:"tags,omitempty" gorm:"foreignKey:NoteID"`
+}
+
+type Topic struct {
+	ID             string          `json:"id" gorm:"primaryKey;type:varchar(36)"`
+	UserID         string          `json:"userId" gorm:"not null;index"`
+	Title          string          `json:"title" gorm:"not null"`
+	CoreQuestion   string          `json:"coreQuestion" gorm:"type:text"`
+	TargetAudience string          `json:"targetAudience" gorm:"type:text"`
+	Conclusion     string          `json:"conclusion" gorm:"type:text"`
+	DesiredAction  string          `json:"desiredAction" gorm:"type:text"`
+	Status         string          `json:"status" gorm:"default:'idea';index"`
+	StartedAt      *time.Time      `json:"startedAt"`
+	CreatedAt      time.Time       `json:"createdAt" gorm:"autoCreateTime"`
+	UpdatedAt      time.Time       `json:"updatedAt" gorm:"autoUpdateTime"`
+	Materials      []TopicMaterial `json:"materials,omitempty" gorm:"foreignKey:TopicID;constraint:OnDelete:CASCADE"`
+	Works          []Work          `json:"works,omitempty" gorm:"foreignKey:TopicID;constraint:OnDelete:CASCADE"`
+}
+
+type TopicMaterial struct {
+	TopicID   string    `json:"topicId" gorm:"primaryKey;type:varchar(36)"`
+	NoteID    string    `json:"noteId" gorm:"primaryKey;type:varchar(36);index"`
+	CreatedAt time.Time `json:"createdAt" gorm:"autoCreateTime"`
+	Note      Note      `json:"note,omitempty" gorm:"foreignKey:NoteID"`
+}
+
+type Work struct {
+	ID           string        `json:"id" gorm:"primaryKey;type:varchar(36)"`
+	UserID       string        `json:"userId" gorm:"not null;index"`
+	TopicID      string        `json:"topicId" gorm:"not null;index"`
+	ParentID     *string       `json:"parentId" gorm:"index"`
+	Platform     string        `json:"platform" gorm:"not null;index"`
+	Title        string        `json:"title"`
+	Content      string        `json:"content" gorm:"type:text"`
+	Status       string        `json:"status" gorm:"default:'draft';index"`
+	AIGenerated  string        `json:"aiGenerated" gorm:"type:text"`
+	CreatedAt    time.Time     `json:"createdAt" gorm:"autoCreateTime"`
+	UpdatedAt    time.Time     `json:"updatedAt" gorm:"autoUpdateTime"`
+	Citations    []Citation    `json:"citations,omitempty" gorm:"foreignKey:WorkID;constraint:OnDelete:CASCADE"`
+	Publications []Publication `json:"publications,omitempty" gorm:"foreignKey:WorkID;constraint:OnDelete:CASCADE"`
+}
+
+type Citation struct {
+	ID              string    `json:"id" gorm:"primaryKey;type:varchar(36)"`
+	WorkID          string    `json:"workId" gorm:"not null;index"`
+	NoteID          *string   `json:"noteId" gorm:"index"`
+	Marker          string    `json:"marker"`
+	SourceTitle     string    `json:"sourceTitle"`
+	SourceExcerpt   string    `json:"sourceExcerpt" gorm:"type:text"`
+	SourceAvailable bool      `json:"sourceAvailable" gorm:"default:true"`
+	CreatedAt       time.Time `json:"createdAt" gorm:"autoCreateTime"`
+}
+
+type StyleProfile struct {
+	ID                string    `json:"id" gorm:"primaryKey;type:varchar(36)"`
+	UserID            string    `json:"userId" gorm:"not null;uniqueIndex"`
+	Biography         string    `json:"biography" gorm:"type:text"`
+	Positioning       string    `json:"positioning" gorm:"type:text"`
+	RulesJSON         string    `json:"rulesJson" gorm:"type:text"`
+	BannedPhrasesJSON string    `json:"bannedPhrasesJson" gorm:"type:text"`
+	CreatedAt         time.Time `json:"createdAt" gorm:"autoCreateTime"`
+	UpdatedAt         time.Time `json:"updatedAt" gorm:"autoUpdateTime"`
+}
+
+type Revision struct {
+	ID                  string    `json:"id" gorm:"primaryKey;type:varchar(36)"`
+	WorkID              string    `json:"workId" gorm:"not null;index"`
+	UserID              string    `json:"userId" gorm:"not null;index"`
+	PreviousContent     string    `json:"previousContent" gorm:"type:text"`
+	Content             string    `json:"content" gorm:"type:text"`
+	Summary             string    `json:"summary" gorm:"type:text"`
+	Preference          string    `json:"preference" gorm:"type:text"`
+	PreferenceConfirmed bool      `json:"preferenceConfirmed" gorm:"default:false"`
+	CreatedAt           time.Time `json:"createdAt" gorm:"autoCreateTime"`
+}
+
+type Publication struct {
+	ID          string    `json:"id" gorm:"primaryKey;type:varchar(36)"`
+	UserID      string    `json:"userId" gorm:"not null;index"`
+	WorkID      string    `json:"workId" gorm:"not null;index"`
+	Platform    string    `json:"platform" gorm:"not null;index"`
+	URL         string    `json:"url" gorm:"type:text"`
+	PublishedAt time.Time `json:"publishedAt"`
+	Views       int       `json:"views"`
+	Likes       int       `json:"likes"`
+	Favorites   int       `json:"favorites"`
+	Comments    int       `json:"comments"`
+	Notes       string    `json:"notes" gorm:"type:text"`
+	CreatedAt   time.Time `json:"createdAt" gorm:"autoCreateTime"`
+}
+
+type MaterialInsight struct {
+	ID        string    `json:"id" gorm:"primaryKey;type:varchar(36)"`
+	UserID    string    `json:"userId" gorm:"not null;index"`
+	NoteID    string    `json:"noteId" gorm:"not null;index"`
+	Type      string    `json:"type" gorm:"not null;index"`
+	Content   string    `json:"content" gorm:"type:text"`
+	CreatedAt time.Time `json:"createdAt" gorm:"autoCreateTime"`
+}
+
+type UploadedFile struct {
+	ID        string    `json:"id" gorm:"primaryKey;type:varchar(36)"`
+	UserID    string    `json:"userId" gorm:"not null;index"`
+	Filename  string    `json:"filename" gorm:"not null;uniqueIndex"`
+	CreatedAt time.Time `json:"createdAt" gorm:"autoCreateTime"`
 }
 
 type Tag struct {

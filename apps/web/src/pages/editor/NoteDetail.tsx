@@ -245,7 +245,10 @@ export default function NoteDetail() {
     });
 
     // Real-time sync via Go WebSocket hub
-    const wsUrl = `ws://localhost:3001/ws/yjs`;
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const configuredApi = import.meta.env.VITE_API_URL as string | undefined;
+    const wsHost = configuredApi?.startsWith('http') ? new URL(configuredApi).host : window.location.host;
+    const wsUrl = `${wsProtocol}//${wsHost}/ws/yjs`;
     const wsProvider = new WebsocketProvider(wsUrl, id, ydoc);
 
     wsProvider.on('status', (event: { status: string }) => {

@@ -1,9 +1,43 @@
 version: '3.8'
 
 services:
-  # ── NovaNote Server (Go) ──────────────────────────────────
-  # For production, build the Go binary into a Docker image.
-  # During development, run `go run ./cmd/server` directly.
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: notavia_web
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      server:
+        condition: service_healthy
+    restart: unless-stopped
+
+  server:
+    build: ./apps/server
+    container_name: notavia_server
+    environment:
+      PORT: 3001
+      DB_DRIVER: sqlite
+      DB_PATH: /app/data/notavia.db
+      UPLOAD_DIR: /app/data/uploads
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env before starting Notavia}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
+      OLLAMA_URL: http://ollama:11434
+      QDRANT_URL: http://qdrant:6333
+      WHISPER_BASE_URL: http://whisper:9000/v1
+    volumes:
+      - notavia_data:/app/data
+    depends_on:
+      - ollama
+      - qdrant
+      - whisper
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
 
   # ── Database (Optional: PostgreSQL for enterprise) ────────
   postgres:
@@ -73,6 +107,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  notavia_data:
   postgres_data:
   redis_data:
   ollama_data:

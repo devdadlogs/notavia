@@ -10,6 +10,7 @@ import (
 	"github.com/notavia/server/internal/config"
 	"github.com/notavia/server/internal/handlers"
 	"github.com/notavia/server/internal/middleware"
+	"github.com/notavia/server/internal/models"
 	"github.com/notavia/server/internal/services"
 )
 
@@ -34,8 +35,8 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	// Serve uploaded files as static assets
-	r.Static("/uploads", config.AppConfig.UploadDir)
+	// Private uploads: authentication and ownership are checked before serving.
+	r.GET("/uploads/:filename", middleware.AuthMiddleware(), handlers.DownloadFile)
 
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
@@ -49,8 +50,14 @@ func main() {
 	})
 
 	// --- Yjs WebSocket Sync (public, auth via query param for WS) ---
-	r.GET("/ws/yjs/:docId", func(c *gin.Context) {
+	r.GET("/ws/yjs/:docId", middleware.AuthMiddleware(), func(c *gin.Context) {
 		docID := c.Param("docId")
+		var count int64
+		config.DB.Model(&models.Note{}).Where("id = ? AND user_id = ?", docID, middleware.GetUserID(c)).Count(&count)
+		if count == 0 {
+			c.AbortWithStatusJSON(404, gin.H{"error": "note not found"})
+			return
+		}
 		yjsHub.HandleConnection(c.Writer, c.Request, docID)
 	})
 
@@ -119,16 +126,56 @@ func main() {
 			ai.POST("/chat-with-notes", handlers.AIChatWithNotes)
 			ai.POST("/chat", handlers.AIChat)
 		}
+
+		materials := protected.Group("/materials")
+		{
+			materials.GET("", handlers.ListMaterials)
+			materials.PUT("/:id/source", handlers.UpdateMaterialSource)
+		}
+
+		topics := protected.Group("/topics")
+		{
+			topics.POST("", handlers.CreateTopic)
+			topics.GET("", handlers.ListTopics)
+			topics.GET("/:id", handlers.GetTopic)
+			topics.PUT("/:id", handlers.UpdateTopic)
+			topics.DELETE("/:id", handlers.DeleteTopic)
+			topics.POST("/:id/materials", handlers.AddTopicMaterial)
+			topics.DELETE("/:id/materials/:noteId", handlers.RemoveTopicMaterial)
+		}
+
+		works := protected.Group("/works")
+		{
+			works.POST("", handlers.CreateWork)
+			works.GET("/:id", handlers.GetWork)
+			works.PUT("/:id", handlers.UpdateWork)
+			works.DELETE("/:id", handlers.DeleteWork)
+		}
+
+		creatorAI := protected.Group("/creator-ai")
+		{
+			creatorAI.POST("/retrieve", handlers.RetrieveCreatorMaterials)
+			creatorAI.POST("/insights", handlers.ExtractMaterialInsights)
+			creatorAI.POST("/draft", handlers.GenerateCreatorDraft)
+			creatorAI.POST("/style-review", handlers.ReviewCreatorStyle)
+			creatorAI.POST("/transform", handlers.TransformCreatorWork)
+		}
+
+		protected.GET("/style-profile", handlers.GetStyleProfile)
+		protected.PUT("/style-profile", handlers.UpdateStyleProfile)
+		protected.POST("/publications", handlers.CreatePublication)
+		protected.PUT("/publications/:id", handlers.UpdatePublication)
+		protected.DELETE("/publications/:id", handlers.DeletePublication)
+		protected.GET("/metrics/validation", handlers.ValidationMetrics)
 	}
 
-	// Serve static files from uploads
-	r.Static("/static", "./uploads/audio")
+	r.GET("/static/:filename", middleware.AuthMiddleware(), handlers.DownloadAudioFile)
 
 	// Start server
 	addr := fmt.Sprintf(":%s", config.AppConfig.Port)
 	fmt.Printf(`
 ╔══════════════════════════════════════════════╗
-║        NovaNote Private Server v0.1.0        ║
+║        Notavia Creator Server v0.2.0         ║
 ║──────────────────────────────────────────────║
 ║  🌐 API:      http://localhost%s          ║
 ║  💾 Database:  %s                       ║
@@ -141,4 +188,3 @@ func main() {
 		log.Fatal("Failed to start server:", err)
 	}
 }
-

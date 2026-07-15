@@ -176,8 +176,38 @@ ul[data-type="taskList"] li > div {
 .web-snapshot-content video,
 .web-snapshot-content audio { display: block; max-width: 100%; height: auto; margin: 1.5em auto; }
 .web-snapshot-content video { width: 100%; background: #0b1020; border-radius: 12px; }
-.web-snapshot-content video.wechat-video { width: auto; max-width: min(100%, 680px); }
 .web-snapshot-content iframe { display: block; width: 100%; min-height: 480px; margin: 1.5em auto; border: 0; border-radius: 12px; background: #0b1020; }
+.web-snapshot-content .wechat-video-card { width: min(100%, 680px); margin: 1.25em auto; }
+.web-snapshot-content .wechat-video-cover {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  aspect-ratio: 3 / 4;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #202536, #111522);
+}
+.web-snapshot-content .wechat-video-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.web-snapshot-content .wechat-video-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: 68px;
+  height: 68px;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 75%);
+  border-radius: 50%;
+  color: white;
+  background: rgb(20 24 34 / 58%);
+  font-size: 25px;
+  transform: translate(-50%, -50%);
+}
+.web-snapshot-content .wechat-video-card figcaption { display: flex; justify-content: space-between; gap: 12px; margin-top: 10px; color: var(--text-secondary); font-size: 13px; }
+.web-snapshot-content .wechat-video-card figcaption span { color: var(--text-tertiary); }
 .web-snapshot-content--wechat p { margin-block: 0; }
 .web-snapshot-content--wechat img { margin-block: 0; }
 .web-snapshot-content--wechat p.clipper-spacer {

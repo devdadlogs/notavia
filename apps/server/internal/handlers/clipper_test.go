@@ -215,17 +215,22 @@ func TestPreserveArticleAssetsConvertsWeChatVideoCard(t *testing.T) {
   <mp-common-videosnap data-type="video" data-url="https://findermp.video.qq.com/video.mp4?token=abc&amp;idx=1" data-width="1080" data-height="1440" data-desc="人物采访"></mp-common-videosnap>
 </section>
 </main>`))
-	preserveArticleAssets(doc.Find("main"), "https://mp.weixin.qq.com/s/example", func(string) (string, error) {
-		return "", errors.New("no image")
+	preserveArticleAssets(doc.Find("main"), "https://mp.weixin.qq.com/s/example", func(source string) (string, error) {
+		if strings.Contains(source, "findermp.video.qq.com") {
+			return "/uploads/wechat-video-cover.jpg", nil
+		}
+		return "", errors.New("unexpected image")
 	})
 
 	html, _ := doc.Find("main").Html()
-	for _, expected := range []string{`<video`, `controls="controls"`, `src="https://findermp.video.qq.com/video.mp4?token=abc&amp;idx=1"`, `width="1080"`, `height="1440"`, `class="clipper-spacer"`} {
+	for _, expected := range []string{`class="wechat-video-card"`, `src="/uploads/wechat-video-cover.jpg"`, `href="https://mp.weixin.qq.com/s/example"`, `微信扫码观看`, `class="clipper-spacer"`} {
 		if !strings.Contains(html, expected) {
 			t.Fatalf("expected %q in converted WeChat content: %s", expected, html)
 		}
 	}
-	if strings.Contains(html, "mp-common-videosnap") {
-		t.Fatalf("WeChat-only video element remained: %s", html)
+	for _, unexpected := range []string{"mp-common-videosnap", "<video", `src="https://findermp.video.qq.com`} {
+		if strings.Contains(html, unexpected) {
+			t.Fatalf("unplayable remote video markup remained: %s", html)
+		}
 	}
 }

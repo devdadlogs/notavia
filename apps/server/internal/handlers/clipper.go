@@ -37,7 +37,6 @@ type downloadedAsset struct {
 }
 
 var uploadedAssetPattern = regexp.MustCompile(`/uploads/([A-Za-z0-9._-]+)`)
-var safeMediaDimension = regexp.MustCompile(`^[1-9][0-9]{0,4}$`)
 
 func clipperFetchTimedOut(err error) bool {
 	if errors.Is(err, context.DeadlineExceeded) {
@@ -136,36 +135,42 @@ func preserveArticleAssets(content *goquery.Selection, pageURL string, download 
 
 	// Once img.src is normalized, picture sources could override it with remote URLs.
 	content.Find("picture source").Remove()
-	normalizeWeChatVideoCards(content, base)
+	normalizeWeChatVideoCards(content, base, download)
 	normalizeMedia(content, base, download)
 	markClippedSpacers(content)
 	normalizeLinks(content, base)
 	sanitizeClippedHTML(content)
 }
 
-func normalizeWeChatVideoCards(content *goquery.Selection, base *url.URL) {
+func normalizeWeChatVideoCards(content *goquery.Selection, base *url.URL, download imageDownloader) {
 	content.Find("mp-common-videosnap[data-url]").Each(func(_ int, card *goquery.Selection) {
-		raw, _ := card.Attr("data-url")
-		videoURL := resolveWebURL(base, raw)
-		if videoURL == "" {
-			card.Remove()
-			return
-		}
-
-		attributes := []string{
-			`class="wechat-video"`,
-			`controls="controls"`,
-			`preload="metadata"`,
-			`playsinline="playsinline"`,
-			`src="` + html.EscapeString(videoURL) + `"`,
-		}
-		for _, name := range []string{"width", "height"} {
-			if value, ok := card.Attr("data-" + name); ok && safeMediaDimension.MatchString(value) {
-				attributes = append(attributes, name+`="`+value+`"`)
+		coverURL := ""
+		for _, attribute := range []string{"data-feedthumburl", "data-feedcoverurl", "data-url"} {
+			if raw, ok := card.Attr(attribute); ok {
+				if resolved := resolveWebURL(base, raw); resolved != "" {
+					coverURL = resolved
+					break
+				}
 			}
 		}
-		fallback := `<a href="` + html.EscapeString(videoURL) + `" target="_blank" rel="noreferrer">打开原视频</a>`
-		card.ReplaceWithHtml("<video " + strings.Join(attributes, " ") + ">" + fallback + "</video>")
+
+		poster := ""
+		if coverURL != "" {
+			if local, err := download(coverURL); err == nil {
+				poster = `<img src="` + html.EscapeString(local) + `" alt="微信视频封面">`
+			}
+		}
+
+		nickname, _ := card.Attr("data-nickname")
+		if strings.TrimSpace(nickname) == "" {
+			nickname = "微信视频"
+		}
+		cardHTML := `<figure class="wechat-video-card">` +
+			`<a class="wechat-video-cover" href="` + html.EscapeString(base.String()) + `" target="_blank" rel="noreferrer">` +
+			poster + `<span class="wechat-video-play" aria-hidden="true">▶</span></a>` +
+			`<figcaption><strong>` + html.EscapeString(nickname) + `</strong><span>微信扫码观看</span></figcaption>` +
+			`</figure>`
+		card.ReplaceWithHtml(cardHTML)
 	})
 }
 

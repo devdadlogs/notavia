@@ -2,10 +2,13 @@ package handlers
 
 import (
 	"archive/zip"
+	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -512,7 +515,11 @@ func DeleteNotePermanent(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Note not found"})
 		return
 	}
+	removableUploads := removableNoteUploads(userID, []models.Note{note})
 	if err := config.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("note_id = ?", noteID).Delete(&models.NoteTag{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Model(&models.Citation{}).Where("note_id = ?", noteID).Updates(map[string]interface{}{"note_id": nil, "source_available": false}).Error; err != nil {
 			return err
 		}
@@ -527,6 +534,7 @@ func DeleteNotePermanent(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to permanently delete note"})
 		return
 	}
+	removeUploadedAssets(userID, removableUploads)
 	c.JSON(http.StatusOK, gin.H{"message": "Note permanently deleted"})
 }
 
@@ -534,8 +542,12 @@ func EmptyTrash(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var notes []models.Note
 	config.DB.Where("user_id = ? AND is_trashed = ?", userID, true).Find(&notes)
+	removableUploads := removableNoteUploads(userID, notes)
 	err := config.DB.Transaction(func(tx *gorm.DB) error {
 		for _, note := range notes {
+			if err := tx.Where("note_id = ?", note.ID).Delete(&models.NoteTag{}).Error; err != nil {
+				return err
+			}
 			if err := tx.Model(&models.Citation{}).Where("note_id = ?", note.ID).Updates(map[string]interface{}{"note_id": nil, "source_available": false}).Error; err != nil {
 				return err
 			}
@@ -552,6 +564,7 @@ func EmptyTrash(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "Failed to empty trash"})
 		return
 	}
+	removeUploadedAssets(userID, removableUploads)
 	c.JSON(http.StatusOK, gin.H{"message": "Trash emptied", "count": len(notes)})
 }
 
@@ -640,6 +653,13 @@ func WebClipper(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	parsedURL, err := url.ParseRequestURI(input.URL)
+	if err != nil || (parsedURL.Scheme != "http" && parsedURL.Scheme != "https") || parsedURL.Host == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请输入有效的 http:// 或 https:// 网页地址"})
+		return
+	}
+	clipContext, cancelClip := context.WithTimeout(c.Request.Context(), 90*time.Second)
+	defer cancelClip()
 
 	// 1. Fetch URL content with User-Agent
 	req, err := http.NewRequest("GET", input.URL, nil)
@@ -647,10 +667,12 @@ func WebClipper(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
 		return
 	}
+	req = req.WithContext(clipContext)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 	fmt.Printf("🌐 Clipping URL: %s\n", input.URL)
 
-	res, err := http.DefaultClient.Do(req)
+	clipperClient := newClipperHTTPClient()
+	res, err := clipperClient.Do(req)
 	if err != nil {
 		fmt.Printf("❌ Clipper fetch error: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch URL"})
@@ -665,7 +687,7 @@ func WebClipper(c *gin.Context) {
 	}
 
 	// 2. Parse HTML and extract text
-	doc, err := goquery.NewDocumentFromReader(res.Body)
+	doc, err := goquery.NewDocumentFromReader(io.LimitReader(res.Body, 10<<20))
 	if err != nil {
 		fmt.Printf("❌ Clipper parse error: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse HTML"})
@@ -696,6 +718,8 @@ func WebClipper(c *gin.Context) {
 
 	// Remove scripts, styles, etc. from the source
 	contentSource.Find("script, style, nav, footer, header, aside").Remove()
+	var downloadedAssets []downloadedAsset
+	preserveArticleAssets(contentSource, input.URL, clippedImageDownloader(clipContext, userID, clipperClient, &downloadedAssets))
 	contentHtml, err := contentSource.Html()
 	if err != nil {
 		contentHtml = contentSource.Text()
@@ -709,8 +733,9 @@ func WebClipper(c *gin.Context) {
 	}
 
 	// Limit text length to avoid token limits
-	if len(textContent) > 10000 {
-		textContent = textContent[:10000]
+	textRunes := []rune(textContent)
+	if len(textRunes) > 10000 {
+		textContent = string(textRunes[:10000])
 	}
 
 	// 3. Fetch existing tags for the user
@@ -753,20 +778,21 @@ func WebClipper(c *gin.Context) {
 <p><strong>%s</strong></p>
 <p><em>来源链接：<a href="%s">%s</a></em></p>
 <hr>
-<div>%s</div>`, parsedResult.Summary, input.URL, input.URL, contentHtml)
+<div>%s</div>`, html.EscapeString(parsedResult.Summary), html.EscapeString(input.URL), html.EscapeString(input.URL), contentHtml)
 
-	// 6. Create Note with HTML in ContentText. ContentJSON left empty so frontend parses HTML.
+	// Store formatted HTML separately from searchable plain text.
 	note := models.Note{
 		ID:          uuid.New().String(),
 		UserID:      userID,
 		Title:       title,
-		ContentJSON: "", // Empty triggers frontend HTML fallback
-		ContentText: finalHtml,
+		ContentJSON: finalHtml,
+		ContentText: textContent,
 		SourceType:  "web",
 		SourceURL:   input.URL,
 	}
 
 	if err := config.DB.Create(&note).Error; err != nil {
+		rollbackDownloadedAssets(downloadedAssets)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create note"})
 		return
 	}
@@ -775,7 +801,7 @@ func WebClipper(c *gin.Context) {
 	assignTagsToNote(userID, note.ID, parsedResult.Tags)
 
 	// 9. Index in vector DB for semantic search
-	go indexNoteInVectorDB(userID, note.ID, note.Title, note.ContentText)
+	go indexNoteInVectorDB(userID, note.ID, note.Title, textContent)
 
 	// Preload tags to return to frontend
 	config.DB.Preload("Tags.Tag").First(&note, "id = ?", note.ID)

@@ -24,6 +24,9 @@ import (
 const maxClippedImageSize = 15 << 20 // 15 MB per image
 const maxClippedImages = 50
 const maxClippedImagesTotalSize = 75 << 20 // 75 MB per article
+const maxClippedHTMLSize = 10 << 20
+const clipperFetchAttempts = 2
+const clipperFetchAttemptTimeout = 35 * time.Second
 
 type imageDownloader func(string) (string, error)
 
@@ -34,6 +37,63 @@ type downloadedAsset struct {
 
 var uploadedAssetPattern = regexp.MustCompile(`/uploads/([A-Za-z0-9._-]+)`)
 var safeMediaDimension = regexp.MustCompile(`^[1-9][0-9]{0,4}$`)
+
+func fetchClipperHTML(ctx context.Context, client *http.Client, rawURL string) ([]byte, error) {
+	var lastErr error
+	for attempt := 1; attempt <= clipperFetchAttempts; attempt++ {
+		attemptCtx, cancel := context.WithTimeout(ctx, clipperFetchAttemptTimeout)
+		req, err := http.NewRequestWithContext(attemptCtx, http.MethodGet, rawURL, nil)
+		if err != nil {
+			cancel()
+			return nil, err
+		}
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+		req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.7")
+
+		res, requestErr := client.Do(req)
+		if requestErr == nil {
+			if res.StatusCode != http.StatusOK {
+				_ = res.Body.Close()
+				cancel()
+				lastErr = fmt.Errorf("网页返回状态码 %d", res.StatusCode)
+				if res.StatusCode != http.StatusTooManyRequests && res.StatusCode < http.StatusInternalServerError {
+					return nil, lastErr
+				}
+				continue
+			}
+
+			body, readErr := io.ReadAll(io.LimitReader(res.Body, maxClippedHTMLSize+1))
+			_ = res.Body.Close()
+			attemptErr := attemptCtx.Err()
+			cancel()
+			if readErr == nil {
+				if len(body) > maxClippedHTMLSize {
+					return nil, fmt.Errorf("网页正文超过 %d MB 限制", maxClippedHTMLSize>>20)
+				}
+				return body, nil
+			}
+			if attemptErr != nil {
+				lastErr = fmt.Errorf("读取网页正文超时: %w", attemptErr)
+			} else {
+				lastErr = fmt.Errorf("读取网页正文失败: %w", readErr)
+			}
+		} else {
+			attemptErr := attemptCtx.Err()
+			cancel()
+			if attemptErr != nil {
+				lastErr = fmt.Errorf("连接网页超时: %w", attemptErr)
+			} else {
+				lastErr = fmt.Errorf("连接网页失败: %w", requestErr)
+			}
+		}
+
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("抓取网页已取消: %w", ctx.Err())
+		}
+	}
+	return nil, lastErr
+}
 
 func preserveArticleAssets(content *goquery.Selection, pageURL string, download imageDownloader) {
 	base, err := url.Parse(pageURL)
@@ -378,6 +438,9 @@ func clippedImageExtension(contentType, sourceURL string) string {
 func newClipperHTTPClient() *http.Client {
 	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
 	transport := &http.Transport{
+		ResponseHeaderTimeout: 20 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		IdleConnTimeout:       30 * time.Second,
 		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 			host, port, err := net.SplitHostPort(address)
 			if err != nil {
@@ -398,7 +461,7 @@ func newClipperHTTPClient() *http.Client {
 			return dialer.DialContext(ctx, network, net.JoinHostPort(ips[0].IP.String(), port))
 		},
 	}
-	return &http.Client{Transport: transport, Timeout: 25 * time.Second}
+	return &http.Client{Transport: transport}
 }
 
 func unsafeClipperIP(ip net.IP) bool {

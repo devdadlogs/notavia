@@ -30,8 +30,9 @@ export default function CreatorDashboard() {
     try {
       const { data } = await api.post('/notes/clipper', { url });
       navigate(`/n/${data.id}`);
-    } catch {
-      setClipError('没有抓取到网页内容。请检查网址，或确认网页允许公开访问。');
+    } catch (error: unknown) {
+      const serverMessage = (error as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      setClipError(serverMessage || '网页抓取失败，请稍后重试。');
     } finally { setClipping(false); }
   };
 

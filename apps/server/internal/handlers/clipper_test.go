@@ -22,6 +22,31 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return fn(req) }
 
+type errorReadCloser struct{ err error }
+
+func (r errorReadCloser) Read([]byte) (int, error) { return 0, r.err }
+func (r errorReadCloser) Close() error             { return nil }
+
+func TestFetchClipperHTMLRetriesWhenResponseBodyTimesOut(t *testing.T) {
+	attempts := 0
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		attempts++
+		body := io.ReadCloser(io.NopCloser(strings.NewReader(`<html><title>成功</title></html>`)))
+		if attempts == 1 {
+			body = errorReadCloser{err: context.DeadlineExceeded}
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: body}, nil
+	})}
+
+	body, err := fetchClipperHTML(context.Background(), client, "https://mp.weixin.qq.com/s/example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 2 || !strings.Contains(string(body), "<title>成功</title>") {
+		t.Fatalf("expected a successful second attempt, attempts=%d body=%s", attempts, body)
+	}
+}
+
 func TestPreserveArticleAssetsLocalizesImagesAndKeepsStructure(t *testing.T) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(`<article>
 <h2>标题</h2><p><strong>重点</strong></p>

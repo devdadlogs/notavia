@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -658,36 +660,25 @@ func WebClipper(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请输入有效的 http:// 或 https:// 网页地址"})
 		return
 	}
-	clipContext, cancelClip := context.WithTimeout(c.Request.Context(), 90*time.Second)
-	defer cancelClip()
-
-	// 1. Fetch URL content with User-Agent
-	req, err := http.NewRequest("GET", input.URL, nil)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
-		return
-	}
-	req = req.WithContext(clipContext)
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	// 1. Fetch URL content. Slow public pages get one automatic retry.
 	fmt.Printf("🌐 Clipping URL: %s\n", input.URL)
 
 	clipperClient := newClipperHTTPClient()
-	res, err := clipperClient.Do(req)
+	fetchContext, cancelFetch := context.WithTimeout(c.Request.Context(), 75*time.Second)
+	body, err := fetchClipperHTML(fetchContext, clipperClient, input.URL)
+	cancelFetch()
 	if err != nil {
 		fmt.Printf("❌ Clipper fetch error: %v\n", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch URL"})
-		return
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode != 200 {
-		fmt.Printf("❌ Clipper status error: %d %s\n", res.StatusCode, res.Status)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Status code error: %d", res.StatusCode)})
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "网页响应超时，系统已自动重试，请稍后再试"})
+		} else {
+			c.JSON(http.StatusBadGateway, gin.H{"error": "网页抓取失败：" + err.Error()})
+		}
 		return
 	}
 
 	// 2. Parse HTML and extract text
-	doc, err := goquery.NewDocumentFromReader(io.LimitReader(res.Body, 10<<20))
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
 	if err != nil {
 		fmt.Printf("❌ Clipper parse error: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse HTML"})
@@ -719,7 +710,9 @@ func WebClipper(c *gin.Context) {
 	// Remove scripts, styles, etc. from the source
 	contentSource.Find("script, style, nav, footer, header, aside").Remove()
 	var downloadedAssets []downloadedAsset
-	preserveArticleAssets(contentSource, input.URL, clippedImageDownloader(clipContext, userID, clipperClient, &downloadedAssets))
+	assetContext, cancelAssets := context.WithTimeout(c.Request.Context(), 90*time.Second)
+	defer cancelAssets()
+	preserveArticleAssets(contentSource, input.URL, clippedImageDownloader(assetContext, userID, clipperClient, &downloadedAssets))
 	contentHtml, err := contentSource.Html()
 	if err != nil {
 		contentHtml = contentSource.Text()

@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -669,8 +668,8 @@ func WebClipper(c *gin.Context) {
 	cancelFetch()
 	if err != nil {
 		fmt.Printf("❌ Clipper fetch error: %v\n", err)
-		if errors.Is(err, context.DeadlineExceeded) {
-			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "网页响应超时，系统已自动重试，请稍后再试"})
+		if clipperFetchTimedOut(err) {
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "网页连接超时，系统已自动重试，请稍后再试"})
 		} else {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "网页抓取失败：" + err.Error()})
 		}

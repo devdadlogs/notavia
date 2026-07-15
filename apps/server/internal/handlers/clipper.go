@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -37,6 +38,14 @@ type downloadedAsset struct {
 
 var uploadedAssetPattern = regexp.MustCompile(`/uploads/([A-Za-z0-9._-]+)`)
 var safeMediaDimension = regexp.MustCompile(`^[1-9][0-9]{0,4}$`)
+
+func clipperFetchTimedOut(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var networkErr net.Error
+	return errors.As(err, &networkErr) && networkErr.Timeout()
+}
 
 func fetchClipperHTML(ctx context.Context, client *http.Client, rawURL string) ([]byte, error) {
 	var lastErr error
@@ -439,7 +448,7 @@ func newClipperHTTPClient() *http.Client {
 	dialer := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
 	transport := &http.Transport{
 		ResponseHeaderTimeout: 20 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
+		TLSHandshakeTimeout:   20 * time.Second,
 		IdleConnTimeout:       30 * time.Second,
 		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 			host, port, err := net.SplitHostPort(address)

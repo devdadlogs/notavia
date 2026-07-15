@@ -3,13 +3,16 @@ package handlers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/notavia/server/internal/config"
@@ -26,6 +29,30 @@ type errorReadCloser struct{ err error }
 
 func (r errorReadCloser) Read([]byte) (int, error) { return 0, r.err }
 func (r errorReadCloser) Close() error             { return nil }
+
+type tlsTimeoutError struct{}
+
+func (tlsTimeoutError) Error() string   { return "net/http: TLS handshake timeout" }
+func (tlsTimeoutError) Timeout() bool   { return true }
+func (tlsTimeoutError) Temporary() bool { return true }
+
+func TestClipperHTTPClientAllowsSlowTLSHandshake(t *testing.T) {
+	client := newClipperHTTPClient()
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("unexpected transport %T", client.Transport)
+	}
+	if transport.TLSHandshakeTimeout < 20*time.Second {
+		t.Fatalf("TLS handshake timeout is still too short: %s", transport.TLSHandshakeTimeout)
+	}
+}
+
+func TestClipperFetchTimedOutRecognizesTLSHandshakeTimeout(t *testing.T) {
+	err := fmt.Errorf("连接网页失败: %w", &url.Error{URL: "https://mp.weixin.qq.com", Err: tlsTimeoutError{}})
+	if !clipperFetchTimedOut(err) {
+		t.Fatalf("expected TLS handshake failure to be treated as a timeout: %v", err)
+	}
+}
 
 func TestFetchClipperHTMLRetriesWhenResponseBodyTimesOut(t *testing.T) {
 	attempts := 0

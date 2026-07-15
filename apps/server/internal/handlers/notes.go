@@ -789,6 +789,7 @@ func WebClipper(c *gin.Context) {
 		ContentText: textContent,
 		SourceType:  "web",
 		SourceURL:   input.URL,
+		SourceHTML:  finalHtml,
 	}
 
 	if err := config.DB.Create(&note).Error; err != nil {

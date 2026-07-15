@@ -67,6 +67,7 @@ type Note struct {
 	TranscriptSummary string    `json:"transcriptSummary" gorm:"type:text"`
 	SourceType        string    `json:"sourceType" gorm:"default:'manual';index"`
 	SourceURL         string    `json:"sourceUrl" gorm:"type:text"`
+	SourceHTML        string    `json:"sourceHtml" gorm:"type:text"`
 	WordCount         int       `json:"wordCount" gorm:"default:0"`
 	IsPinned          bool      `json:"isPinned" gorm:"default:false"`
 	IsTrashed         bool      `json:"isTrashed" gorm:"default:false"`

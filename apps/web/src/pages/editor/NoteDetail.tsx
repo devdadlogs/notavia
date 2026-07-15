@@ -9,6 +9,9 @@ import TextAlign from '@tiptap/extension-text-align';
 import { TextStyle, Color } from '@tiptap/extension-text-style';
 import Highlight from '@tiptap/extension-highlight';
 import { ResizableImage } from '../../components/editor/extensions/ResizableImage';
+import { Video } from '../../components/editor/extensions/Video';
+import { Audio } from '../../components/editor/extensions/Audio';
+import WebSnapshot from '../../components/editor/WebSnapshot';
 import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
 import { Markdown } from 'tiptap-markdown';
 import api, { uploadFile } from '../../services/api';
@@ -318,6 +321,8 @@ export default function NoteDetail() {
       TaskList,
       TaskItem.configure({ nested: true }),
       ResizableImage,
+      Video,
+      Audio,
       Markdown,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       TextStyle,
@@ -436,6 +441,7 @@ export default function NoteDetail() {
         const { data } = await api.get(`/notes/${id}`);
         setNoteData(data);
         setTitle(data.title === 'Untitled' ? '' : data.title);
+        setActiveTab(data.sourceType === 'web' && data.sourceHtml ? 'source' : 'note');
         
         if (!editor || editor.isDestroyed) return;
 
@@ -743,12 +749,18 @@ export default function NoteDetail() {
 
         {/* Tab Navigation */}
         <div className="note-tabs">
+          {noteData?.sourceType === 'web' && noteData?.sourceHtml && (
+            <div className={`note-tab ${activeTab === 'source' ? 'active' : ''}`} onClick={() => setActiveTab('source')}>原始素材</div>
+          )}
           <div className={`note-tab ${activeTab === 'transcript' ? 'active' : ''}`} onClick={() => setActiveTab('transcript')}>录音原文</div>
           <div className={`note-tab ${activeTab === 'note' ? 'active' : ''}`} onClick={() => setActiveTab('note')}>笔记内容</div>
         </div>
 
         {/* Tab Content Area */}
         <div style={{ flex: 1 }}>
+          {activeTab === 'source' && noteData?.sourceHtml && (
+            <WebSnapshot html={noteData.sourceHtml} sourceUrl={noteData.sourceUrl} />
+          )}
           {activeTab === 'note' && (
             <div>
               <EditorToolbar editor={editor} noteTitle={title} />

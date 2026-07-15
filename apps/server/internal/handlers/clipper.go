@@ -66,8 +66,55 @@ func preserveArticleAssets(content *goquery.Selection, pageURL string, download 
 
 	// Once img.src is normalized, picture sources could override it with remote URLs.
 	content.Find("picture source").Remove()
+	normalizeMedia(content, base, download)
 	normalizeLinks(content, base)
 	sanitizeClippedHTML(content)
+}
+
+func normalizeMedia(content *goquery.Selection, base *url.URL, download imageDownloader) {
+	content.Find("video,audio").Each(func(_ int, media *goquery.Selection) {
+		raw, _ := media.Attr("src")
+		if strings.TrimSpace(raw) == "" {
+			raw, _ = media.Find("source[src]").First().Attr("src")
+		}
+		if absolute := resolveWebURL(base, raw); absolute != "" {
+			media.SetAttr("src", absolute)
+		} else {
+			media.RemoveAttr("src")
+		}
+		media.Find("source").Remove()
+		media.RemoveAttr("autoplay")
+		media.RemoveAttr("loop")
+		media.SetAttr("controls", "controls")
+		media.SetAttr("preload", "metadata")
+
+		if poster, ok := media.Attr("poster"); ok {
+			if absolute := resolveWebURL(base, poster); absolute != "" {
+				if local, err := download(absolute); err == nil {
+					media.SetAttr("poster", local)
+				} else {
+					media.RemoveAttr("poster")
+				}
+			} else {
+				media.RemoveAttr("poster")
+			}
+		}
+	})
+
+	content.Find("iframe[src]").Each(func(_ int, frame *goquery.Selection) {
+		raw, _ := frame.Attr("src")
+		absolute := resolveWebURL(base, raw)
+		if absolute == "" {
+			frame.Remove()
+			return
+		}
+		frame.SetAttr("src", absolute)
+		frame.SetAttr("sandbox", "allow-scripts allow-same-origin allow-presentation")
+		frame.SetAttr("allow", "fullscreen; picture-in-picture")
+		frame.SetAttr("loading", "lazy")
+		frame.SetAttr("referrerpolicy", "no-referrer")
+		frame.RemoveAttr("srcdoc")
+	})
 }
 
 func replaceUnavailableImage(image *goquery.Selection, originalURL string) {
@@ -122,13 +169,13 @@ func normalizeLinks(content *goquery.Selection, base *url.URL) {
 }
 
 func sanitizeClippedHTML(content *goquery.Selection) {
-	content.Find("script,style,noscript,iframe,object,embed,form,input,button,textarea,select,link,meta,video,audio,source,track,svg").Remove()
+	content.Find("script,style,noscript,object,embed,form,input,button,textarea,select,link,meta,source,track,svg").Remove()
 	content.Find("*").Each(func(_ int, element *goquery.Selection) {
 		for _, node := range element.Nodes {
 			var remove []string
 			for _, attr := range node.Attr {
 				key := strings.ToLower(attr.Key)
-				if strings.HasPrefix(key, "on") || key == "srcdoc" || key == "style" {
+				if strings.HasPrefix(key, "on") || key == "srcdoc" {
 					remove = append(remove, attr.Key)
 				}
 			}
@@ -136,7 +183,43 @@ func sanitizeClippedHTML(content *goquery.Selection) {
 				element.RemoveAttr(key)
 			}
 		}
+		if rawStyle, ok := element.Attr("style"); ok {
+			if safeStyle := sanitizeInlineStyle(rawStyle); safeStyle != "" {
+				element.SetAttr("style", safeStyle)
+			} else {
+				element.RemoveAttr("style")
+			}
+		}
 	})
+}
+
+var allowedInlineStyles = map[string]bool{
+	"color": true, "background-color": true, "font-size": true, "font-weight": true,
+	"font-style": true, "font-family": true, "line-height": true, "letter-spacing": true,
+	"text-align": true, "text-decoration": true, "margin": true, "margin-top": true,
+	"margin-right": true, "margin-bottom": true, "margin-left": true, "padding": true,
+	"padding-top": true, "padding-right": true, "padding-bottom": true, "padding-left": true,
+	"width": true, "max-width": true, "height": true, "max-height": true,
+}
+
+func sanitizeInlineStyle(raw string) string {
+	var safe []string
+	for _, declaration := range strings.Split(raw, ";") {
+		parts := strings.SplitN(declaration, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		property := strings.ToLower(strings.TrimSpace(parts[0]))
+		value := strings.TrimSpace(parts[1])
+		lowerValue := strings.ToLower(value)
+		if !allowedInlineStyles[property] || value == "" || strings.Contains(lowerValue, "url(") ||
+			strings.Contains(lowerValue, "expression") || strings.Contains(lowerValue, "javascript:") ||
+			strings.ContainsAny(value, "{}<>\\") {
+			continue
+		}
+		safe = append(safe, property+": "+value)
+	}
+	return strings.Join(safe, "; ")
 }
 
 func clippedImageDownloader(ctx context.Context, userID string, client *http.Client, assets *[]downloadedAsset) imageDownloader {
@@ -203,7 +286,7 @@ func removableNoteUploads(userID string, notes []models.Note) []string {
 	candidates := map[string]struct{}{}
 	for _, note := range notes {
 		deletingIDs = append(deletingIDs, note.ID)
-		content := note.ContentJSON + "\n" + note.ContentText + "\n" + note.CoverImage
+		content := note.ContentJSON + "\n" + note.ContentText + "\n" + note.SourceHTML + "\n" + note.CoverImage
 		for _, match := range uploadedAssetPattern.FindAllStringSubmatch(content, -1) {
 			candidates[filepath.Base(match[1])] = struct{}{}
 		}
@@ -217,7 +300,7 @@ func removableNoteUploads(userID string, notes []models.Note) []string {
 			query = query.Where("id NOT IN ?", deletingIDs)
 		}
 		var references int64
-		query.Where("content_json LIKE ? OR content_text LIKE ? OR cover_image LIKE ?", like, like, like).Count(&references)
+		query.Where("content_json LIKE ? OR content_text LIKE ? OR source_html LIKE ? OR cover_image LIKE ?", like, like, like, like).Count(&references)
 		if references == 0 {
 			removable = append(removable, filename)
 		}

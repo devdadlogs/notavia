@@ -57,7 +57,7 @@ func DownloadFile(c *gin.Context) {
 	config.DB.Model(&models.UploadedFile{}).Where("filename = ? AND user_id = ?", filename, userID).Count(&count)
 	if count == 0 {
 		like := "%/uploads/" + filename + "%"
-		config.DB.Model(&models.Note{}).Where("user_id = ? AND (content_json LIKE ? OR content_text LIKE ? OR cover_image LIKE ? OR audio_url LIKE ?)", userID, like, like, like, like).Count(&count)
+		config.DB.Model(&models.Note{}).Where("user_id = ? AND (content_json LIKE ? OR content_text LIKE ? OR source_html LIKE ? OR cover_image LIKE ? OR audio_url LIKE ?)", userID, like, like, like, like, like).Count(&count)
 	}
 	if count == 0 {
 		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})

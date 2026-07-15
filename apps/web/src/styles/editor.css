@@ -125,6 +125,63 @@ ul[data-type="taskList"] li > div {
   outline: 2px solid var(--primary-color);
 }
 
+/* Imported web materials keep a read-only source snapshot beside the editable note. */
+.web-snapshot {
+  width: min(100%, 920px);
+  margin: 0 auto;
+}
+
+.web-snapshot-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 18px;
+  margin-bottom: 28px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--bg-input);
+}
+
+.web-snapshot-banner div,
+.web-snapshot-banner a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.web-snapshot-banner span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.web-snapshot-banner a {
+  color: var(--accent-color);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.web-snapshot-content {
+  color: var(--text-primary);
+  font-size: 16px;
+  line-height: 1.85;
+  overflow-wrap: anywhere;
+}
+
+.web-snapshot-content p { margin: 1em 0; }
+.web-snapshot-content h1,
+.web-snapshot-content h2,
+.web-snapshot-content h3 { line-height: 1.35; margin: 1.5em 0 0.7em; }
+.web-snapshot-content img,
+.web-snapshot-content video,
+.web-snapshot-content audio { display: block; max-width: 100%; height: auto; margin: 1.5em auto; }
+.web-snapshot-content video { width: 100%; background: #0b1020; border-radius: 12px; }
+.web-snapshot-content iframe { display: block; width: 100%; min-height: 480px; margin: 1.5em auto; border: 0; border-radius: 12px; background: #0b1020; }
+.web-snapshot-content blockquote { margin: 1.2em 0; padding-left: 1em; border-left: 3px solid var(--accent-color); }
+.web-snapshot-content table { width: 100%; border-collapse: collapse; }
+.web-snapshot-content th,
+.web-snapshot-content td { padding: 8px 10px; border: 1px solid var(--border-color); }
+
 /* Custom Editor Header Layout (per screenshots) */
 .note-header-layout {
   padding-bottom: 16px;

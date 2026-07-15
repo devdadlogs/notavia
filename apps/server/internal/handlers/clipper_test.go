@@ -130,3 +130,28 @@ func TestPreserveArticleAssetsDoesNotLeaveRemoteTrackingImage(t *testing.T) {
 		t.Fatalf("expected a non-fetching original-image link, got %s", html)
 	}
 }
+
+func TestPreserveArticleAssetsKeepsSafeVideoAndVisualFormatting(t *testing.T) {
+	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(`<main>
+<p style="color: #8b1a12; font-size: 24px; line-height: 1.8; position: fixed; background-image: url(https://tracker.test/a.png)">重点内容</p>
+<video autoplay poster="/poster.jpg"><source src="/interview.mp4" type="video/mp4"></video>
+<iframe src="https://tv.cctv.com/player.html?id=1"></iframe>
+</main>`))
+	preserveArticleAssets(doc.Find("main"), "https://example.com/article", func(source string) (string, error) {
+		if strings.HasSuffix(source, "/poster.jpg") {
+			return "/uploads/poster.jpg", nil
+		}
+		return "", errors.New("unexpected image")
+	})
+	html, _ := doc.Find("main").Html()
+	for _, expected := range []string{`color: #8b1a12`, `font-size: 24px`, `line-height: 1.8`, `src="https://example.com/interview.mp4"`, `poster="/uploads/poster.jpg"`, `sandbox=`, `https://tv.cctv.com/player.html?id=1`} {
+		if !strings.Contains(html, expected) {
+			t.Fatalf("expected %q in preserved HTML: %s", expected, html)
+		}
+	}
+	for _, unsafe := range []string{"autoplay", "position: fixed", "background-image", "tracker.test"} {
+		if strings.Contains(html, unsafe) {
+			t.Fatalf("unsafe formatting remained: %s", html)
+		}
+	}
+}

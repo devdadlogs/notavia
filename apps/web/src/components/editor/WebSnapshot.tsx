@@ -6,6 +6,8 @@ interface WebSnapshotProps {
 }
 
 export default function WebSnapshot({ html, sourceUrl }: WebSnapshotProps) {
+  const isWeChat = sourceUrl?.startsWith('https://mp.weixin.qq.com/') ?? false;
+
   return (
     <section className="web-snapshot" aria-label="导入网页原文">
       <div className="web-snapshot-banner">
@@ -19,7 +21,10 @@ export default function WebSnapshot({ html, sourceUrl }: WebSnapshotProps) {
           </a>
         )}
       </div>
-      <article className="web-snapshot-content" dangerouslySetInnerHTML={{ __html: html }} />
+      <article
+        className={`web-snapshot-content${isWeChat ? ' web-snapshot-content--wechat' : ''}`}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
     </section>
   );
 }

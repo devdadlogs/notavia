@@ -176,7 +176,14 @@ ul[data-type="taskList"] li > div {
 .web-snapshot-content video,
 .web-snapshot-content audio { display: block; max-width: 100%; height: auto; margin: 1.5em auto; }
 .web-snapshot-content video { width: 100%; background: #0b1020; border-radius: 12px; }
+.web-snapshot-content video.wechat-video { width: auto; max-width: min(100%, 680px); }
 .web-snapshot-content iframe { display: block; width: 100%; min-height: 480px; margin: 1.5em auto; border: 0; border-radius: 12px; background: #0b1020; }
+.web-snapshot-content--wechat p { margin-block: 0; }
+.web-snapshot-content--wechat img { margin-block: 0; }
+.web-snapshot-content--wechat p.clipper-spacer {
+  min-height: 0.65em;
+  line-height: 0.65 !important;
+}
 .web-snapshot-content blockquote { margin: 1.2em 0; padding-left: 1em; border-left: 3px solid var(--accent-color); }
 .web-snapshot-content table { width: 100%; border-collapse: collapse; }
 .web-snapshot-content th,

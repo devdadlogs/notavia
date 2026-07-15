@@ -155,3 +155,25 @@ func TestPreserveArticleAssetsKeepsSafeVideoAndVisualFormatting(t *testing.T) {
 		}
 	}
 }
+
+func TestPreserveArticleAssetsConvertsWeChatVideoCard(t *testing.T) {
+	doc, _ := goquery.NewDocumentFromReader(strings.NewReader(`<main>
+<p style="margin: 0; line-height: 1.75em"><span><br></span></p>
+<section class="channels_iframe_wrp">
+  <mp-common-videosnap data-type="video" data-url="https://findermp.video.qq.com/video.mp4?token=abc&amp;idx=1" data-width="1080" data-height="1440" data-desc="人物采访"></mp-common-videosnap>
+</section>
+</main>`))
+	preserveArticleAssets(doc.Find("main"), "https://mp.weixin.qq.com/s/example", func(string) (string, error) {
+		return "", errors.New("no image")
+	})
+
+	html, _ := doc.Find("main").Html()
+	for _, expected := range []string{`<video`, `controls="controls"`, `src="https://findermp.video.qq.com/video.mp4?token=abc&amp;idx=1"`, `width="1080"`, `height="1440"`, `class="clipper-spacer"`} {
+		if !strings.Contains(html, expected) {
+			t.Fatalf("expected %q in converted WeChat content: %s", expected, html)
+		}
+	}
+	if strings.Contains(html, "mp-common-videosnap") {
+		t.Fatalf("WeChat-only video element remained: %s", html)
+	}
+}

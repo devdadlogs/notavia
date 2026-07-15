@@ -33,6 +33,7 @@ type downloadedAsset struct {
 }
 
 var uploadedAssetPattern = regexp.MustCompile(`/uploads/([A-Za-z0-9._-]+)`)
+var safeMediaDimension = regexp.MustCompile(`^[1-9][0-9]{0,4}$`)
 
 func preserveArticleAssets(content *goquery.Selection, pageURL string, download imageDownloader) {
 	base, err := url.Parse(pageURL)
@@ -66,9 +67,48 @@ func preserveArticleAssets(content *goquery.Selection, pageURL string, download 
 
 	// Once img.src is normalized, picture sources could override it with remote URLs.
 	content.Find("picture source").Remove()
+	normalizeWeChatVideoCards(content, base)
 	normalizeMedia(content, base, download)
+	markClippedSpacers(content)
 	normalizeLinks(content, base)
 	sanitizeClippedHTML(content)
+}
+
+func normalizeWeChatVideoCards(content *goquery.Selection, base *url.URL) {
+	content.Find("mp-common-videosnap[data-url]").Each(func(_ int, card *goquery.Selection) {
+		raw, _ := card.Attr("data-url")
+		videoURL := resolveWebURL(base, raw)
+		if videoURL == "" {
+			card.Remove()
+			return
+		}
+
+		attributes := []string{
+			`class="wechat-video"`,
+			`controls="controls"`,
+			`preload="metadata"`,
+			`playsinline="playsinline"`,
+			`src="` + html.EscapeString(videoURL) + `"`,
+		}
+		for _, name := range []string{"width", "height"} {
+			if value, ok := card.Attr("data-" + name); ok && safeMediaDimension.MatchString(value) {
+				attributes = append(attributes, name+`="`+value+`"`)
+			}
+		}
+		fallback := `<a href="` + html.EscapeString(videoURL) + `" target="_blank" rel="noreferrer">打开原视频</a>`
+		card.ReplaceWithHtml("<video " + strings.Join(attributes, " ") + ">" + fallback + "</video>")
+	})
+}
+
+func markClippedSpacers(content *goquery.Selection) {
+	content.Find("p").Each(func(_ int, paragraph *goquery.Selection) {
+		if strings.TrimSpace(paragraph.Text()) != "" || paragraph.Find("br").Length() == 0 ||
+			paragraph.Find("img,video,audio,iframe,table,hr").Length() > 0 {
+			return
+		}
+		classes, _ := paragraph.Attr("class")
+		paragraph.SetAttr("class", strings.TrimSpace(classes+" clipper-spacer"))
+	})
 }
 
 func normalizeMedia(content *goquery.Selection, base *url.URL, download imageDownloader) {

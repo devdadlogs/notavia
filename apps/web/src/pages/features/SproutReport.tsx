@@ -5,7 +5,10 @@ import api from '../../services/api';
 import { useNavigate } from 'react-router-dom';
 
 export default function SproutReport() {
-  const [graphData, setGraphData] = useState({ nodes: [], links: [] });
+  const [graphData, setGraphData] = useState<{
+    nodes: Array<{ id: string; name: string; val: number }>;
+    links: Array<{ source: string; target: string }>;
+  }>({ nodes: [], links: [] });
   const [dimensions, setDimensions] = useState({ width: 600, height: 500 });
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -41,7 +44,7 @@ export default function SproutReport() {
         }));
         
         // Generate random links to simulate semantic connections (Sprouting)
-        const links = [];
+        const links: Array<{ source: string; target: string }> = [];
         for (let i = 0; i < nodes.length; i++) {
           const numLinks = Math.floor(Math.random() * 3);
           for (let j = 0; j < numLinks; j++) {

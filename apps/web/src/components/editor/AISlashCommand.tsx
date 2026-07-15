@@ -107,7 +107,7 @@ export default function AISlashCommand({ editor }: AISlashCommandProps) {
       // We will use the existing AI chat service
       const response = await aiService.chat(aiPrompt); // We need a direct chat method, let's use global chat
       
-      const aiText = response.text || response.reply || response;
+      const aiText = response.text;
       
       if (actionType === 'prompt' || actionType === 'continue') {
         // Append at cursor

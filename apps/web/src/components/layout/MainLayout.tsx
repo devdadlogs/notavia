@@ -7,9 +7,9 @@ export default function MainLayout() {
   const { isSidebarOpen } = useUIStore();
 
   return (
-    <div style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: 'var(--bg-color)', overflow: 'hidden' }}>
+    <div className="app-shell" style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: 'var(--bg-color)', overflow: 'hidden' }}>
       {/* Left Sidebar */}
-      <div style={{ 
+      <div className="app-sidebar-shell" style={{
         width: isSidebarOpen ? '280px' : '0px', 
         flexShrink: 0, 
         height: '100%',
@@ -20,7 +20,7 @@ export default function MainLayout() {
       </div>
 
       {/* Main Content Area */}
-      <div style={{ flex: 1, height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+      <div className="app-main-content" style={{ flex: 1, height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
         <Outlet />
       </div>
     </div>

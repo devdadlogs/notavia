@@ -741,13 +741,12 @@ func WebClipper(c *gin.Context) {
 %s`, existingTagsStr, textContent)
 
 	aiResponse, err := getLLMProvider(userID).Generate(prompt)
+	parsedResult := ClipperAIResponse{Summary: "网页原文已保存，可稍后使用 AI 提炼。", Tags: []string{"网页剪藏"}}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "AI generation failed"})
-		return
+		fmt.Printf("⚠️ Clipper AI unavailable, saving source without summary: %v\n", err)
+	} else {
+		parsedResult = parseClipperAIResponse(aiResponse)
 	}
-
-	// 5. Parse AI Response
-	parsedResult := parseClipperAIResponse(aiResponse)
 
 	// Format as HTML so Tiptap natively parses it nicely (bypassing naive JSON conversion)
 	finalHtml := fmt.Sprintf(`<h3>📝 网页剪藏摘要</h3>

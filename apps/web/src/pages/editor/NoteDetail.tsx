@@ -174,7 +174,7 @@ export default function NoteDetail() {
       const { data } = await api.post(`/notes/${id}/audio`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      setNoteData(prev => prev ? { ...prev, audioUrl: data.audioUrl } : null);
+      setNoteData((prev: any) => prev ? { ...prev, audioUrl: data.audioUrl } : null);
     } catch (err) {
       console.error('Audio upload failed', err);
     }
@@ -312,7 +312,7 @@ export default function NoteDetail() {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        history: false,  // Required for Yjs collaboration
+        undoRedo: false,  // Required for Yjs collaboration
         // StarterKit already includes Link and Underline — don't register separately
       }),
       TaskList,

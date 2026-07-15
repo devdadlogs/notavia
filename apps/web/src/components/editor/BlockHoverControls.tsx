@@ -141,7 +141,7 @@ export function BlockHoverControls({ editor }: BlockHoverControlsProps) {
     if (!file || actionPosRef.current === null) return;
     try {
       const url = await uploadFile(file);
-      editor.chain().focus()
+      editor?.chain().focus()
         .setNodeSelection(actionPosRef.current)
         .insertContent({ type: 'resizableImage', attrs: { src: url } })
         .run();
@@ -159,7 +159,7 @@ export function BlockHoverControls({ editor }: BlockHoverControlsProps) {
     if (!file || actionPosRef.current === null) return;
     try {
       const url = await uploadFile(file);
-      editor.chain().focus()
+      editor?.chain().focus()
         .setNodeSelection(actionPosRef.current)
         .insertContent({
           type: 'text',
@@ -178,7 +178,7 @@ export function BlockHoverControls({ editor }: BlockHoverControlsProps) {
 
   const submitLink = () => {
     if (!linkDialog.url) return;
-    editor.chain().focus()
+    editor?.chain().focus()
       .setNodeSelection(linkDialog.pos)
       .insertContent({
         type: 'text',
@@ -313,10 +313,10 @@ export function BlockHoverControls({ editor }: BlockHoverControlsProps) {
           style={{
             position: 'fixed',
             ...(openUpwards 
-              ? { bottom: window.innerHeight - hoverState.top + 4 } 
-              : { top: hoverState.top + 24 }
+              ? { bottom: window.innerHeight - hoverState!.top + 4 }
+              : { top: hoverState!.top + 24 }
             ),
-            left: hoverState.left,
+            left: hoverState!.left,
             background: 'var(--bg-panel)',
             border: '1px solid var(--border-color)',
             borderRadius: '8px',
@@ -360,7 +360,7 @@ export function BlockHoverControls({ editor }: BlockHoverControlsProps) {
           })}
           {renderMenuItem(<Link size={15}/>, "链接", () => {
              setIsMenuOpen(false);
-             setLinkDialog({ open: true, text: '', url: '', pos: hoverState.pos });
+             setLinkDialog({ open: true, text: '', url: '', pos: hoverState!.pos });
           })}
           {renderMenuItem(<Minus size={15}/>, "分割线", () => editor.chain().focus().setHorizontalRule().run())}
           {renderMenuItem(<Hash size={15}/>, "流程图/UML", () => {})}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, FilePlus2, Lightbulb, PenLine, Send, Sparkles } from 'lucide-react';
+import { ArrowRight, BookOpen, FilePlus2, Lightbulb, Link2, Loader2, PenLine, Send, Sparkles } from 'lucide-react';
+import api from '../../services/api';
 import { creatorService, type Material, type Topic } from '../../services/creator';
 
 const statusLabel: Record<string, string> = { idea: '想法', preparing: '准备中', writing: '写作中', ready: '待发布', published: '已发布', archived: '归档' };
@@ -12,6 +13,9 @@ export default function CreatorDashboard() {
   const [metrics, setMetrics] = useState({ activeDays: 0, completedWorks: 0, aiRetentionRate: 0, averageCreationMinutes: 0 });
   const [title, setTitle] = useState('');
   const [creating, setCreating] = useState(false);
+  const [clipUrl, setClipUrl] = useState('');
+  const [clipping, setClipping] = useState(false);
+  const [clipError, setClipError] = useState('');
 
   useEffect(() => { Promise.all([creatorService.listTopics(), creatorService.metrics(), creatorService.listMaterials()]).then(([t, m, materials]) => { setTopics(t); setMetrics(m); setRecentMaterials(materials.slice(0,4)); }); }, []);
   const create = async () => {
@@ -19,17 +23,37 @@ export default function CreatorDashboard() {
     const topic = await creatorService.createTopic({ title: title.trim(), status: 'idea' });
     navigate(`/topics/${topic.id}`);
   };
+  const importLink = async () => {
+    const url = clipUrl.trim();
+    if (!/^https?:\/\//i.test(url)) { setClipError('请输入以 http:// 或 https:// 开头的完整网址'); return; }
+    setClipping(true); setClipError('');
+    try {
+      const { data } = await api.post('/notes/clipper', { url });
+      navigate(`/n/${data.id}`);
+    } catch {
+      setClipError('没有抓取到网页内容。请检查网址，或确认网页允许公开访问。');
+    } finally { setClipping(false); }
+  };
 
   const active = topics.filter(t => ['preparing', 'writing'].includes(t.status));
   const ready = topics.filter(t => t.status === 'ready');
-  return <div style={{ padding: '36px 44px', maxWidth: 1280, margin: '0 auto' }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 34 }}>
-      <div><div style={{ color: '#059669', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>NOTAVIA CREATOR</div><h1 style={{ margin: 0, fontSize: 34 }}>把素材，变成能发布的作品</h1><p style={{ color: 'var(--text-secondary)' }}>从私人素材出发，保留来源，保持七九自己的表达。</p></div>
-      <div style={{ display: 'flex', gap: 10 }}><button className="btn btn-outline" onClick={() => navigate('/materials')}><FilePlus2 size={16}/> 新增素材</button><button className="btn btn-primary" onClick={() => setCreating(true)}><Lightbulb size={16}/> 创建选题</button></div>
-    </div>
+  return <div className="creator-page">
+    <header className="creator-hero">
+      <div className="creator-kicker"><span /> NOTAVIA CREATOR</div>
+      <h1>把见过的、想过的，<br/><em>变成你的作品。</em></h1>
+      <p>收好每一条来源。写作时，Notavia 帮你把过去的积累找回来。</p>
+      <div className="capture-bar">
+        <div className="capture-icon"><Link2 size={21}/></div>
+        <input aria-label="粘贴网页链接" value={clipUrl} onChange={e => setClipUrl(e.target.value)} onKeyDown={e => e.key === 'Enter' && importLink()} placeholder="粘贴文章、公众号或网页链接…" />
+        <button onClick={importLink} disabled={clipping}>{clipping ? <Loader2 className="spin" size={18}/> : <ArrowRight size={18}/>}<span>{clipping ? '正在读取' : '导入素材'}</span></button>
+      </div>
+      <div className="capture-meta"><span>自动保留标题、正文和原始链接</span><button onClick={() => navigate('/materials')}><FilePlus2 size={14}/> 也可以手写、录音或导入文件</button></div>
+      {clipError && <div className="capture-error">{clipError}</div>}
+      <button className="hero-topic-action" onClick={() => setCreating(true)}><Lightbulb size={16}/> 我已经有选题了</button>
+    </header>
     {creating && <div className="glass-panel" style={{ padding: 18, display: 'flex', gap: 10, marginBottom: 24 }}><input autoFocus value={title} onChange={e => setTitle(e.target.value)} onKeyDown={e => e.key === 'Enter' && create()} placeholder="这次想把什么问题讲清楚？" style={{ flex: 1, padding: 12, border: '1px solid var(--border-color)', borderRadius: 8, background: 'var(--bg-input)' }}/><button className="btn btn-primary" onClick={create}>开始</button><button className="btn btn-outline" onClick={() => setCreating(false)}>取消</button></div>}
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 32 }}>
-      {[['30天使用', `${metrics.activeDays} 天`, <Sparkles/>], ['完成作品', `${metrics.completedWorks} 篇`, <BookOpen/>], ['AI内容保留', `${Math.round(metrics.aiRetentionRate * 100)}%`, <PenLine/>], ['平均耗时', metrics.averageCreationMinutes ? `${metrics.averageCreationMinutes} 分钟` : '待记录', <Send/>]].map(([label,value,icon]) => <div className="glass-panel" style={{ padding: 20 }} key={String(label)}><div style={{ color:'#059669' }}>{icon}</div><div style={{ fontSize: 26, fontWeight: 750, marginTop: 14 }}>{value}</div><div style={{ color:'var(--text-secondary)', fontSize:13 }}>{label}</div></div>)}
+    <div className="creator-metrics">
+      {[['30天使用', `${metrics.activeDays} 天`, <Sparkles/>], ['完成作品', `${metrics.completedWorks} 篇`, <BookOpen/>], ['AI内容保留', `${Math.round(metrics.aiRetentionRate * 100)}%`, <PenLine/>], ['平均耗时', metrics.averageCreationMinutes ? `${metrics.averageCreationMinutes} 分钟` : '待记录', <Send/>]].map(([label,value,icon]) => <div className="metric-item" key={String(label)}><div>{icon}</div><strong>{value}</strong><span>{label}</span></div>)}
     </div>
     <Section title="正在创作" empty="还没有正在创作的选题" topics={active} onOpen={id => navigate(`/topics/${id}`)}/>
     <Section title="待发布" empty="完成风格检查后，作品会出现在这里" topics={ready} onOpen={id => navigate(`/topics/${id}`)}/>

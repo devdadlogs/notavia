@@ -166,6 +166,7 @@ export const ResizableImage = Node.create<ResizableImageOptions>({
       const updateNodeAttrs = (newAttrs: Record<string, any>) => {
         if (typeof getPos === 'function') {
           const pos = getPos();
+          if (typeof pos !== 'number') return;
           const currentNode = editor.state.doc.nodeAt(pos);
           if (currentNode) {
             editor.chain().focus().command(({ tr }) => {

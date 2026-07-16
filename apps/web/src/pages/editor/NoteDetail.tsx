@@ -16,7 +16,7 @@ import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table
 import { Markdown } from 'tiptap-markdown';
 import api, { uploadFile } from '../../services/api';
 import { compressImage } from '../../utils/imageCompressor';
-import { ChevronLeft, Gift, MoreVertical, Play, FastForward, Edit3, Sparkles, MessageSquarePlus, Menu, Wifi, WifiOff, Loader2, Pause, Volume2, Mic, Trash2 } from 'lucide-react';
+import { ChevronLeft, Gift, MoreVertical, Play, FastForward, Edit3, Sparkles, MessageSquarePlus, Menu, Wifi, WifiOff, Loader2, Pause, Volume2, Mic, Trash2, ExternalLink } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
 import AIPanel from '../../components/editor/AIPanel';
 import EditorToolbar from '../../components/editor/EditorToolbar';
@@ -788,6 +788,11 @@ export default function NoteDetail() {
           )}
           <div className={`note-tab ${activeTab === 'transcript' ? 'active' : ''}`} onClick={() => setActiveTab('transcript')}>录音原文</div>
           <div className={`note-tab ${activeTab === 'note' ? 'active' : ''}`} onClick={() => setActiveTab('note')}>笔记内容</div>
+          {noteData?.sourceType === 'web' && noteData?.sourceUrl && (
+            <a className="note-source-link" href={noteData.sourceUrl} target="_blank" rel="noreferrer">
+              <ExternalLink size={14} /> 打开来源
+            </a>
+          )}
         </div>
 
         {/* Tab Content Area */}

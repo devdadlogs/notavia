@@ -131,36 +131,6 @@ ul[data-type="taskList"] li > div {
   margin: 0 auto;
 }
 
-.web-snapshot-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 14px 18px;
-  margin-bottom: 28px;
-  border: 1px solid var(--border-color);
-  border-radius: 14px;
-  background: var(--bg-input);
-}
-
-.web-snapshot-banner div,
-.web-snapshot-banner a {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.web-snapshot-banner span {
-  color: var(--text-tertiary);
-  font-size: 12px;
-}
-
-.web-snapshot-banner a {
-  color: var(--accent-color);
-  font-size: 13px;
-  text-decoration: none;
-}
-
 .web-snapshot-content {
   color: var(--text-primary);
   font-size: 16px;
@@ -307,6 +277,17 @@ ul[data-type="taskList"] li > div {
   background-color: var(--text-primary);
   border-radius: 2px;
 }
+.note-source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding: 12px 0;
+  color: var(--accent-color);
+  font-size: 13px;
+  text-decoration: none;
+}
+.note-source-link:hover { color: var(--primary-color); }
 
 /* ===== Formatting Extensions ===== */
 

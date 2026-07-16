@@ -53,10 +53,17 @@ func InitDB() {
 		&models.Topic{}, &models.TopicMaterial{}, &models.Work{}, &models.Citation{},
 		&models.StyleProfile{}, &models.Revision{}, &models.Publication{}, &models.MaterialInsight{},
 		&models.UploadedFile{},
+		&models.LegalAcceptance{},
 	)
 	if err != nil {
 		log.Fatalf("Failed to auto-migrate: %v", err)
 	}
+	// Accounts that already had a creator profile before onboarding existed are
+	// existing users. Keep their current workspace intact and do not force them
+	// through the new-user flow.
+	DB.Exec(`UPDATE users SET onboarding_completed_at = updated_at
+		WHERE onboarding_completed_at IS NULL
+		AND id IN (SELECT user_id FROM style_profiles WHERE biography <> '' OR positioning <> '')`)
 
 	fmt.Println("✅ Database migration complete")
 }

@@ -2,25 +2,19 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuthStore } from '../../stores/authStore';
-import { X, CheckCircle2, Circle } from 'lucide-react';
+import { X } from 'lucide-react';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [agreed, setAgreed] = useState(false);
   
   const navigate = useNavigate();
   const checkAuth = useAuthStore(state => state.checkAuth);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!agreed) {
-      setError('请先阅读并同意《用户协议》和《隐私政策》');
-      return;
-    }
-
     setError('');
     setIsLoading(true);
 
@@ -120,22 +114,7 @@ export default function Login() {
               {isLoading ? '登录中...' : '登录'}
             </button>
 
-            {/* Agreement */}
-            <div 
-              onClick={() => { setAgreed(!agreed); if(error) setError(''); }}
-              style={{ display: 'flex', alignItems: 'center', marginTop: '16px', cursor: 'pointer', userSelect: 'none' }}
-            >
-              {agreed ? (
-                <div style={{ width: '14px', height: '14px', borderRadius: '50%', backgroundColor: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <CheckCircle2 size={12} color="#fff" />
-                </div>
-              ) : (
-                <Circle size={14} color="#ccc" />
-              )}
-              <span style={{ fontSize: '12px', color: '#888', marginLeft: '8px' }}>
-                我已阅读并同意 <span style={{ color: '#444' }}>《用户协议》</span> 和 <span style={{ color: '#444' }}>《隐私政策》</span>
-              </span>
-            </div>
+            <p style={{fontSize:12,color:'#999',lineHeight:1.7,marginTop:16}}>登录即表示你将按照已接受的 <Link to="/legal/terms" target="_blank">《用户协议》</Link> 使用本实例。隐私处理方式见 <Link to="/legal/privacy" target="_blank">《隐私政策》</Link>。</p>
           </form>
         </div>
       </div>

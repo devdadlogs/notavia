@@ -72,6 +72,9 @@ func main() {
 		auth.POST("/logout", handlers.Logout)
 		auth.GET("/me", middleware.AuthMiddleware(), handlers.GetMe)
 		auth.PUT("/me/llm-config", middleware.AuthMiddleware(), handlers.UpdateLLMConfig)
+		auth.PUT("/me/onboarding", middleware.AuthMiddleware(), handlers.CompleteOnboarding)
+		auth.POST("/me/legal-acceptance", middleware.AuthMiddleware(), handlers.AcceptCurrentLegal)
+		auth.DELETE("/me", middleware.AuthMiddleware(), handlers.DeleteAccount)
 	}
 
 	// Protected routes

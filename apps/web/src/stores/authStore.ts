@@ -10,6 +10,11 @@ interface User {
   openAiBaseUrl?: string;
   openAiKey?: string;
   openAiModel?: string;
+  termsVersion?: string;
+  privacyVersion?: string;
+  onboardingCompletedAt?: string | null;
+  cloudAiConsentVersion?: string;
+  cloudAiConsentAt?: string | null;
 }
 
 interface AuthState {

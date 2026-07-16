@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Save, Server, Cloud, ExternalLink } from 'lucide-react';
+import { X, Save, Server, Cloud, ExternalLink, Trash2 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import api from '../../services/api';
 
@@ -20,6 +20,7 @@ const PROVIDERS = [
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const user = useAuthStore((state) => state.user);
   const updateUser = useAuthStore((state) => state.updateUser);
+  const logout = useAuthStore((state) => state.logout);
 
   const [llmProvider, setLlmProvider] = useState('ollama');
   const [openAiBaseUrl, setOpenAiBaseUrl] = useState('');
@@ -29,6 +30,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [isReindexing, setIsReindexing] = useState(false);
 
   const [selectedProviderId, setSelectedProviderId] = useState('custom');
+  const [cloudConsent, setCloudConsent] = useState(false);
 
   useEffect(() => {
     if (isOpen && user) {
@@ -38,6 +40,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       setOpenAiBaseUrl(savedBaseUrl);
       setOpenAiKey(user.openAiKey || '');
       setOpenAiModel(user.openAiModel || '');
+      setCloudConsent(Boolean(user.cloudAiConsentAt));
 
       // Try to auto-match provider based on saved URL
       if (savedBaseUrl) {
@@ -79,6 +82,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   if (!isOpen) return null;
 
   const handleSave = async () => {
+    if (llmProvider === 'openai' && !cloudConsent) {
+      alert('请先确认云模型的数据发送说明');
+      return;
+    }
     try {
       setIsSaving(true);
       const response = await api.put('/auth/me/llm-config', {
@@ -86,6 +93,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         openAiBaseUrl,
         openAiKey,
         openAiModel,
+        cloudAiConsent: cloudConsent,
       });
       if (response.data && response.data.user) {
         updateUser(response.data.user);
@@ -103,6 +111,19 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       alert('保存设置失败');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    const password = window.prompt('注销会永久删除账号及全部内容。请先导出数据，然后输入当前密码确认：');
+    if (!password) return;
+    if (!window.confirm('最后确认：注销后无法恢复，确定继续吗？')) return;
+    try {
+      await api.delete('/auth/me', { data: { password } });
+      await logout();
+      window.location.href = '/auth/register';
+    } catch (error: any) {
+      alert(error.response?.data?.error || '注销账号失败');
     }
   };
 
@@ -243,6 +264,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 <ExternalLink size={12} />
                 请前往对应厂商官网申请 API Key
               </div>
+              <label style={{display:'flex',gap:9,alignItems:'flex-start',padding:'12px',border:'1px solid #f1c88d',borderRadius:8,background:'#fff8ec',fontSize:12,lineHeight:1.6,color:'#765322',cursor:'pointer'}}><input type="checkbox" checked={cloudConsent} onChange={e=>setCloudConsent(e.target.checked)} style={{marginTop:3}}/><span>我确认：发起 AI 操作时，所选素材、提示词和作品片段会发送到上方配置的第三方服务商，并受该服务商条款约束。</span></label>
             </div>
           )}
           
@@ -261,6 +283,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               {isReindexing ? '正在重建索引...' : '重建全部知识库索引'}
             </button>
           </div>
+          <div style={{marginTop:24,padding:16,border:'1px solid #fecaca',borderRadius:8,background:'#fffafa'}}><h4 style={{margin:'0 0 8px',fontSize:14,color:'#991b1b'}}>账号与数据</h4><p style={{margin:'0 0 12px',fontSize:12,color:'#7f1d1d',lineHeight:1.6}}>注销会永久删除素材、选题、作品、表达规则和发布记录。请先使用侧边栏的“完整导出”。</p><button className="btn btn-outline" onClick={handleDeleteAccount} style={{width:'100%',justifyContent:'center',color:'#b91c1c',borderColor:'#fecaca'}}><Trash2 size={15}/>注销账号并删除数据</button></div>
         </div>
 
         {/* Footer */}

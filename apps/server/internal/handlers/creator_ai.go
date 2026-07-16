@@ -157,7 +157,7 @@ func GenerateCreatorDraft(c *gin.Context) {
 		materialData = append(materialData, map[string]string{"id": n.ID, "title": n.Title, "content": truncateRunes(n.ContentText+"\n"+n.Transcript, 7000)})
 	}
 	materialJSON, _ := json.Marshal(materialData)
-	prompt := fmt.Sprintf(`你是七九的写作助手。基于且仅基于给定私人素材写一篇知乎长文草稿。观点必须明确，口语化，不卖课、不贩焦虑，不得编造经历。需要常识补充时在原文后标记【模型补充·待核实】。
+	prompt := fmt.Sprintf(`你是当前创作者的写作助手。基于且仅基于给定私人素材写一篇知乎长文草稿。观点必须明确，表达自然，不得编造经历。需要常识补充时在原文后标记【模型补充·待核实】。
 返回严格 JSON：{"title":"","content":"Markdown，每个引用段落使用 [^1] 标记","citations":[{"noteId":"只能取 SOURCE id 或留空","marker":"[^1]","sourceTitle":"","sourceExcerpt":""}],"risks":["待核实项"]}。
 作者资料：%s
 内容定位：%s
@@ -302,9 +302,8 @@ func loadStyleProfile(userID string) models.StyleProfile {
 	if err := config.DB.Where("user_id = ?", userID).First(&p).Error; err == nil {
 		return p
 	}
-	rules, _ := json.Marshal([]string{"观点明确，直接给出结论", "表达口语化，避免空话和重复", "不卖课，不贩焦虑，只说真话", "不得编造个人经历", "事实和时效性结论需要来源"})
-	banned, _ := json.Marshal([]string{"不是……而是……", "既要……又要……"})
-	p = models.StyleProfile{ID: uuid.NewString(), UserID: userID, Biography: "广东潮汕人，现居北京。两个985学位，二十年软件从业经历，做过外企工程师，带过研发团队，换过几家创业公司。", Positioning: "帮助没有高人指点的普通人在人生关键节点少走弯路，记录真实思考和折腾过程。", RulesJSON: string(rules), BannedPhrasesJSON: string(banned)}
+	rules, _ := json.Marshal([]string{"观点明确，直接给出结论", "表达自然，避免空话和重复"})
+	p = models.StyleProfile{ID: uuid.NewString(), UserID: userID, RulesJSON: string(rules), BannedPhrasesJSON: "[]"}
 	config.DB.Create(&p)
 	return p
 }

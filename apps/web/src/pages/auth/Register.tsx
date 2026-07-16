@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuthStore } from '../../stores/authStore';
 import { X, CheckCircle2, Circle } from 'lucide-react';
+import { PRIVACY_VERSION, TERMS_VERSION } from '../legal/LegalPage';
 
 export default function Register() {
   const [name, setName] = useState('');
@@ -26,7 +27,7 @@ export default function Register() {
     setIsLoading(true);
 
     try {
-      await api.post('/auth/register', { name, email, password });
+      await api.post('/auth/register', { name, email, password, accepted: agreed, termsVersion: TERMS_VERSION, privacyVersion: PRIVACY_VERSION });
       await checkAuth(); // Refresh auth state
       navigate('/');
     } catch (err: any) {
@@ -160,7 +161,7 @@ export default function Register() {
                 <Circle size={14} color="#ccc" />
               )}
               <span style={{ fontSize: '12px', color: '#888', marginLeft: '8px' }}>
-                我已阅读并同意 <span style={{ color: '#444' }}>《用户协议》</span> 和 <span style={{ color: '#444' }}>《隐私政策》</span>
+                我已阅读并同意 <Link onClick={e=>e.stopPropagation()} to="/legal/terms" target="_blank" style={{color:'#333'}}>《用户协议》</Link> 和 <Link onClick={e=>e.stopPropagation()} to="/legal/privacy" target="_blank" style={{color:'#333'}}>《隐私政策》</Link>
               </span>
             </div>
           </form>

@@ -321,9 +321,8 @@ func GetStyleProfile(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var p models.StyleProfile
 	if err := config.DB.Where("user_id = ?", userID).First(&p).Error; err != nil {
-		rules, _ := json.Marshal([]string{"观点明确，直接给出结论", "表达口语化，避免空话和重复", "不卖课，不贩焦虑，只说真话", "不得编造个人经历", "事实和时效性结论需要来源"})
-		banned, _ := json.Marshal([]string{"不是……而是……", "既要……又要……"})
-		p = models.StyleProfile{ID: uuid.NewString(), UserID: userID, Biography: "广东潮汕人，现居北京。两个985学位，二十年软件从业经历，做过外企工程师，带过研发团队，换过几家创业公司。", Positioning: "帮助没有高人指点的普通人在人生关键节点少走弯路，记录真实思考和折腾过程。", RulesJSON: string(rules), BannedPhrasesJSON: string(banned)}
+		rules, _ := json.Marshal([]string{"观点明确，直接给出结论", "表达自然，避免空话和重复"})
+		p = models.StyleProfile{ID: uuid.NewString(), UserID: userID, RulesJSON: string(rules), BannedPhrasesJSON: "[]"}
 		config.DB.Create(&p)
 	}
 	c.JSON(200, p)

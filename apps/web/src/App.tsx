@@ -11,9 +11,12 @@ import TopicWorkspace from './pages/creator/TopicWorkspace';
 import StyleProfilePage from './pages/creator/StyleProfilePage';
 import NoteDetail from './pages/editor/NoteDetail';
 import Trash from './pages/features/Trash';
+import Onboarding from './pages/auth/Onboarding';
+import LegalPage, { PRIVACY_VERSION, TERMS_VERSION } from './pages/legal/LegalPage';
+import LegalConsent from './pages/legal/LegalConsent';
 
 function App() {
-  const { checkAuth, isAuthenticated, isLoading } = useAuthStore();
+  const { checkAuth, isAuthenticated, isLoading, user } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -23,13 +26,18 @@ function App() {
 
   useEffect(() => {
     if (!isLoading) {
-      if (!isAuthenticated && !location.pathname.startsWith('/auth')) {
+      const isPublic = location.pathname.startsWith('/auth') || location.pathname.startsWith('/legal');
+      if (!isAuthenticated && !isPublic) {
         navigate('/auth/login');
-      } else if (isAuthenticated && location.pathname.startsWith('/auth')) {
+      } else if (isAuthenticated && (user?.termsVersion !== TERMS_VERSION || user?.privacyVersion !== PRIVACY_VERSION) && location.pathname !== '/legal/consent' && !location.pathname.startsWith('/legal/terms') && !location.pathname.startsWith('/legal/privacy')) {
+        navigate('/legal/consent');
+      } else if (isAuthenticated && user?.termsVersion === TERMS_VERSION && user?.privacyVersion === PRIVACY_VERSION && !user?.onboardingCompletedAt && location.pathname !== '/onboarding') {
+        navigate('/onboarding');
+      } else if (isAuthenticated && user?.onboardingCompletedAt && user?.termsVersion === TERMS_VERSION && user?.privacyVersion === PRIVACY_VERSION && (location.pathname.startsWith('/auth') || location.pathname === '/onboarding' || location.pathname === '/legal/consent')) {
         navigate('/');
       }
     }
-  }, [isAuthenticated, isLoading, navigate, location.pathname]);
+  }, [isAuthenticated, isLoading, navigate, location.pathname, user?.onboardingCompletedAt, user?.termsVersion, user?.privacyVersion]);
 
   if (isLoading) {
     return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', width: '100vw' }}>加载中...</div>;
@@ -39,6 +47,10 @@ function App() {
     <Routes>
       <Route path="/auth/login" element={<Login />} />
       <Route path="/auth/register" element={<Register />} />
+      <Route path="/legal/terms" element={<LegalPage type="terms" />} />
+      <Route path="/legal/privacy" element={<LegalPage type="privacy" />} />
+      <Route path="/legal/consent" element={isAuthenticated ? <LegalConsent /> : <Navigate to="/auth/login" />} />
+      <Route path="/onboarding" element={isAuthenticated ? <Onboarding /> : <Navigate to="/auth/login" />} />
       
       <Route 
         path="/" 

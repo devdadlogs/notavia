@@ -24,15 +24,29 @@ type User struct {
 	UpdatedAt    time.Time `json:"updatedAt" gorm:"autoUpdateTime"`
 
 	// LLM Configuration
-	LLMProvider   string `json:"llmProvider" gorm:"default:'ollama'"`
-	OpenAIBaseURL string `json:"openAiBaseUrl"`
-	OpenAIKey     string `json:"openAiKey"`
-	OpenAIModel   string `json:"openAiModel"`
+	LLMProvider           string     `json:"llmProvider" gorm:"default:'ollama'"`
+	OpenAIBaseURL         string     `json:"openAiBaseUrl"`
+	OpenAIKey             string     `json:"openAiKey"`
+	OpenAIModel           string     `json:"openAiModel"`
+	TermsVersion          string     `json:"termsVersion"`
+	PrivacyVersion        string     `json:"privacyVersion"`
+	LegalAcceptedAt       *time.Time `json:"legalAcceptedAt"`
+	OnboardingCompletedAt *time.Time `json:"onboardingCompletedAt"`
+	CloudAIConsentVersion string     `json:"cloudAiConsentVersion"`
+	CloudAIConsentAt      *time.Time `json:"cloudAiConsentAt"`
 
 	Notebooks   []Notebook   `json:"notebooks,omitempty" gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
 	Notes       []Note       `json:"notes,omitempty" gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
 	Tags        []Tag        `json:"tags,omitempty" gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
 	AiUsageLogs []AiUsageLog `json:"aiUsageLogs,omitempty" gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
+}
+
+type LegalAcceptance struct {
+	ID             string    `json:"id" gorm:"primaryKey;type:varchar(36)"`
+	UserID         string    `json:"userId" gorm:"not null;index"`
+	TermsVersion   string    `json:"termsVersion" gorm:"not null"`
+	PrivacyVersion string    `json:"privacyVersion" gorm:"not null"`
+	AcceptedAt     time.Time `json:"acceptedAt" gorm:"autoCreateTime"`
 }
 
 type Notebook struct {

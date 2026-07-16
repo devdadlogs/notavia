@@ -137,33 +137,6 @@ func CompleteOnboarding(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"user": sanitizeUser(user)})
 }
 
-func AcceptCurrentLegal(c *gin.Context) {
-	userID := middleware.GetUserID(c)
-	var input struct {
-		Accepted       bool   `json:"accepted"`
-		TermsVersion   string `json:"termsVersion"`
-		PrivacyVersion string `json:"privacyVersion"`
-	}
-	if err := c.ShouldBindJSON(&input); err != nil || !input.Accepted || input.TermsVersion != CurrentTermsVersion || input.PrivacyVersion != CurrentPrivacyVersion {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "请确认当前版本的用户协议和隐私政策"})
-		return
-	}
-	now := time.Now()
-	err := config.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&models.User{}).Where("id = ?", userID).Updates(map[string]any{"terms_version": input.TermsVersion, "privacy_version": input.PrivacyVersion, "legal_accepted_at": now}).Error; err != nil {
-			return err
-		}
-		return tx.Create(&models.LegalAcceptance{ID: uuid.NewString(), UserID: userID, TermsVersion: input.TermsVersion, PrivacyVersion: input.PrivacyVersion, AcceptedAt: now}).Error
-	})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存协议确认失败"})
-		return
-	}
-	var user models.User
-	config.DB.First(&user, "id = ?", userID)
-	c.JSON(http.StatusOK, gin.H{"user": sanitizeUser(user)})
-}
-
 func cleanStrings(values []string) []string {
 	cleaned := make([]string, 0, len(values))
 	seen := map[string]bool{}

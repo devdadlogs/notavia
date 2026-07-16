@@ -48,11 +48,30 @@ docker compose start
 
 ## 本地开发
 
-要求：Node.js 22、pnpm 9+、Go 1.26、Ollama、Qdrant。
+### 一键启动完整服务
+
+首次启动前准备环境变量，然后运行统一启动脚本：
+
+```bash
+cp .env.example .env
+./start.sh
+```
+
+脚本会构建并在后台启动 Docker Compose 中的前端、后端、Redis、Ollama、
+Qdrant 和 Whisper。Web 入口：<http://localhost:8080>。
+
+```bash
+docker compose ps       # 查看服务状态
+docker compose logs -f  # 查看全部日志
+docker compose down     # 停止全部服务
+```
+
+### 单独启动前后端开发服务
+
+要求：Node.js 22、pnpm 9+、Go 1.26。
 
 ```bash
 pnpm install
-docker compose up -d ollama qdrant whisper
 ./start-backend.sh
 ./start-frontend.sh
 ```

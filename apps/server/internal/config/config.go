@@ -7,15 +7,16 @@ import (
 )
 
 type Config struct {
-	Port       string
-	DBDriver   string // "sqlite" or "postgres"
-	DBPath     string // SQLite file path
-	DBDSN      string // PostgreSQL connection string
-	JWTSecret  string
-	OllamaURL  string
-	QdrantURL  string
-	UploadDir  string
-	CORSOrigin string
+	Port        string
+	DBDriver    string // "sqlite" or "postgres"
+	DBPath      string // SQLite file path
+	DBDSN       string // PostgreSQL connection string
+	JWTSecret   string
+	OllamaURL   string
+	OllamaModel string
+	QdrantURL   string
+	UploadDir   string
+	CORSOrigin  string
 
 	// LLM Provider Configuration
 	LLMProvider   string // "ollama" or "openai"
@@ -35,15 +36,16 @@ func Load() {
 	_ = godotenv.Load()
 
 	AppConfig = Config{
-		Port:       getEnv("PORT", "3001"),
-		DBDriver:   getEnv("DB_DRIVER", "sqlite"),
-		DBPath:     getEnv("DB_PATH", "./data/notavia.db"),
-		DBDSN:      getEnv("DATABASE_URL", ""),
-		JWTSecret:  getEnv("JWT_SECRET", "notavia-dev-secret-change-in-production"),
-		OllamaURL:  getEnv("OLLAMA_URL", "http://localhost:11434"),
-		QdrantURL:  getEnv("QDRANT_URL", "http://localhost:6333"),
-		UploadDir:  getEnv("UPLOAD_DIR", "./data/uploads"),
-		CORSOrigin: getEnv("CORS_ORIGIN", "http://localhost:5173"),
+		Port:        getEnv("PORT", "3001"),
+		DBDriver:    getEnv("DB_DRIVER", "sqlite"),
+		DBPath:      getEnv("DB_PATH", "./data/notavia.db"),
+		DBDSN:       getEnv("DATABASE_URL", ""),
+		JWTSecret:   getEnv("JWT_SECRET", "notavia-dev-secret-change-in-production"),
+		OllamaURL:   getEnv("OLLAMA_URL", "http://localhost:11434"),
+		OllamaModel: getEnv("OLLAMA_MODEL", "qwen2.5:1.5b"),
+		QdrantURL:   getEnv("QDRANT_URL", "http://localhost:6333"),
+		UploadDir:   getEnv("UPLOAD_DIR", "./data/uploads"),
+		CORSOrigin:  getEnv("CORS_ORIGIN", "http://localhost:5173"),
 
 		LLMProvider:    getEnv("LLM_PROVIDER", "ollama"),
 		OpenAIBaseURL:  getEnv("OPENAI_BASE_URL", "https://api.openai.com/v1"),

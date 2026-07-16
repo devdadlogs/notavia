@@ -22,14 +22,18 @@ services:
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env before starting Notavia}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
       OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:1.5b}
       QDRANT_URL: http://qdrant:6333
       WHISPER_BASE_URL: http://whisper:9000/v1
     volumes:
       - notavia_data:/app/data
     depends_on:
-      - ollama
-      - qdrant
-      - whisper
+      ollama-init:
+        condition: service_started
+      qdrant:
+        condition: service_started
+      whisper:
+        condition: service_started
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
       interval: 10s
@@ -80,6 +84,21 @@ services:
     #         - driver: nvidia
     #           count: all
     #           capabilities: [gpu]
+
+  # Download the configured local model in the background on first startup.
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: notavia_ollama_init
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        until ollama list >/dev/null 2>&1; do sleep 2; done;
+        ollama pull ${OLLAMA_MODEL:-qwen2.5:1.5b}
+    depends_on:
+      - ollama
+    restart: "on-failure:3"
 
   # ── Qdrant (Vector Database for Semantic Search) ──────────
   qdrant:

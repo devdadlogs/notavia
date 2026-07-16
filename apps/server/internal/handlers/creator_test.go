@@ -7,10 +7,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/notavia/server/internal/config"
 	"github.com/notavia/server/internal/models"
+	"github.com/notavia/server/internal/services"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -51,10 +53,64 @@ func setupCreatorTestDB(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.Topic{}, &models.TopicMaterial{}, &models.Note{}, &models.Work{}, &models.Citation{}, &models.Publication{}, &models.Revision{}); err != nil {
+	if err := db.AutoMigrate(&models.Topic{}, &models.TopicMaterial{}, &models.Note{}, &models.Work{}, &models.Citation{}, &models.Publication{}, &models.Revision{}, &models.StyleProfile{}, &models.MaterialInsight{}); err != nil {
 		t.Fatal(err)
 	}
 	config.DB = db
+}
+
+type blockingInsightProvider struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (p *blockingInsightProvider) CheckHealth() (bool, error)      { return true, nil }
+func (p *blockingInsightProvider) ListModels() ([]string, error)   { return nil, nil }
+func (p *blockingInsightProvider) Generate(string) (string, error) { return "", nil }
+func (p *blockingInsightProvider) GenerateJSON(string) (string, error) {
+	close(p.started)
+	<-p.release
+	return `{"items":[{"type":"summary","content":"测试摘要"}]}`, nil
+}
+func (p *blockingInsightProvider) GenerateStream(string, chan<- string, chan<- error) {}
+func (p *blockingInsightProvider) Embed(string) ([]float32, error)                    { return nil, nil }
+func (p *blockingInsightProvider) TranscribeAudio(string) (string, error)             { return "", nil }
+
+var _ services.LLMProvider = (*blockingInsightProvider)(nil)
+
+func TestExtractMaterialInsightsReturnsBeforeModelFinishes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupCreatorTestDB(t)
+	note := models.Note{ID: "async-note", UserID: "async-user", Title: "测试素材", ContentText: "足够用于提炼的测试内容"}
+	config.DB.Create(&note)
+	provider := &blockingInsightProvider{started: make(chan struct{}), release: make(chan struct{})}
+	originalProvider := creatorInsightProvider
+	creatorInsightProvider = func(string) services.LLMProvider { return provider }
+	t.Cleanup(func() { creatorInsightProvider = originalProvider })
+
+	startedAt := time.Now()
+	w := creatorRequest(http.MethodPost, "/creator-ai/insights", note.UserID, map[string]string{"noteId": note.ID}, ExtractMaterialInsights)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d %s", w.Code, w.Body.String())
+	}
+	if elapsed := time.Since(startedAt); elapsed > 50*time.Millisecond {
+		t.Fatalf("handler waited for model: %s", elapsed)
+	}
+	select {
+	case <-provider.started:
+	case <-time.After(time.Second):
+		t.Fatal("background model call did not start")
+	}
+	close(provider.release)
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if current, ok := materialInsightJobs.Load(note.UserID + ":" + note.ID); ok && current.(materialInsightJob).Status == "ready" {
+			materialInsightJobs.Delete(note.UserID + ":" + note.ID)
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("background insight job did not finish")
 }
 
 func creatorRequest(method, path, userID string, body any, handler gin.HandlerFunc) *httptest.ResponseRecorder {

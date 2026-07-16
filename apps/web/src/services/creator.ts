@@ -16,6 +16,12 @@ export interface MaterialInsight {
   content: string;
 }
 
+export interface MaterialInsightStatus {
+  status: 'idle' | 'processing' | 'ready' | 'error';
+  items?: MaterialInsight[];
+  error?: string;
+}
+
 export interface Citation {
   id: string; noteId?: string; marker: string; sourceTitle: string;
   sourceExcerpt: string; sourceAvailable: boolean;
@@ -48,7 +54,8 @@ export const creatorService = {
   removeMaterial: async (topicId: string, noteId: string) => api.delete(`/topics/${topicId}/materials/${noteId}`),
   listMaterials: async (query = '') => (await api.get<Material[]>('/materials', { params: { q: query } })).data,
   retrieve: async (query: string) => (await api.post('/creator-ai/retrieve', { query, limit: 12 })).data.results,
-  extractInsights: async (noteId: string) => (await api.post('/creator-ai/insights', { noteId })).data.items,
+  extractInsights: async (noteId: string) => (await api.post<MaterialInsightStatus>('/creator-ai/insights', { noteId })).data,
+  getInsightStatus: async (noteId: string) => (await api.get<MaterialInsightStatus>(`/creator-ai/insights/${noteId}/status`)).data,
   generateDraft: async (topicId: string, materialIds: string[]) => (await api.post('/creator-ai/draft', { topicId, materialIds })).data,
   reviewStyle: async (workId: string) => (await api.post('/creator-ai/style-review', { workId })).data,
   transform: async (workId: string, platform: Platform) => (await api.post('/creator-ai/transform', { workId, platform })).data,

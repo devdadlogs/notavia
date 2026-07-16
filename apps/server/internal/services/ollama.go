@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/notavia/server/internal/config"
 )
@@ -16,6 +17,8 @@ type OllamaService struct {
 	baseURL string
 	model   string
 }
+
+var ollamaInferenceClient = &http.Client{Timeout: 90 * time.Second}
 
 // OllamaGenerateRequest is the request body for Ollama /api/generate.
 type OllamaGenerateRequest struct {
@@ -44,7 +47,10 @@ type OllamaTagsResponse struct {
 }
 
 func NewOllamaService() *OllamaService {
-	model := "qwen2.5:1.5b" // Lightweight default, runs well on CPU
+	model := config.AppConfig.OllamaModel
+	if model == "" {
+		model = "qwen2.5:1.5b"
+	}
 	return &OllamaService{
 		baseURL: config.AppConfig.OllamaURL,
 		model:   model,
@@ -73,7 +79,7 @@ func (s *OllamaService) ListModels() ([]string, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
 	}
-	
+
 	names := make([]string, len(result.Models))
 	for i, m := range result.Models {
 		names[i] = m.Name
@@ -88,15 +94,30 @@ func (s *OllamaService) EnsureModel() error {
 		return fmt.Errorf("ollama not reachable: %w", err)
 	}
 
-	for _, name := range models {
-		if strings.HasPrefix(name, strings.Split(s.model, ":")[0]) {
-			fmt.Printf("✅ AI model '%s' already available\n", name)
-			return nil
-		}
+	if configuredModelAvailable(models, s.model) {
+		fmt.Printf("✅ AI model '%s' already available\n", s.model)
+		return nil
 	}
 
 	fmt.Printf("⏳ Pulling AI model '%s' (this may take a few minutes on first run)...\n", s.model)
 	return s.pullModel(s.model)
+}
+
+func configuredModelAvailable(models []string, configured string) bool {
+	for _, name := range models {
+		if name == configured {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *OllamaService) responseError(statusCode int, body []byte) error {
+	detail := strings.TrimSpace(string(body))
+	if statusCode == http.StatusNotFound && strings.Contains(strings.ToLower(detail), "model") {
+		return fmt.Errorf("本地模型 %s 尚未安装。请运行 docker compose exec ollama ollama pull %s，完成后重试", s.model, s.model)
+	}
+	return fmt.Errorf("ollama error (status %d): %s", statusCode, detail)
 }
 
 func (s *OllamaService) pullModel(name string) error {
@@ -125,8 +146,8 @@ func (s *OllamaService) Generate(prompt string) (string, error) {
 		Prompt: prompt,
 		Stream: false,
 		Options: map[string]interface{}{
-			"temperature":   0.7,
-			"num_predict":   1024,
+			"temperature": 0.7,
+			"num_predict": 1024,
 		},
 	}
 
@@ -139,7 +160,7 @@ func (s *OllamaService) Generate(prompt string) (string, error) {
 
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("ollama error (status %d): %s", resp.StatusCode, string(b))
+		return "", s.responseError(resp.StatusCode, b)
 	}
 
 	var result OllamaGenerateResponse
@@ -159,11 +180,12 @@ func (s *OllamaService) GenerateJSON(prompt string) (string, error) {
 		Format: "json", // Enforces strict JSON output
 		Options: map[string]interface{}{
 			"temperature": 0.3, // Lower temperature for more predictable structured output
+			"num_predict": 512,
 		},
 	}
 
 	body, _ := json.Marshal(reqBody)
-	resp, err := http.Post(s.baseURL+"/api/generate", "application/json", bytes.NewReader(body))
+	resp, err := ollamaInferenceClient.Post(s.baseURL+"/api/generate", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("ollama JSON request failed: %w", err)
 	}
@@ -171,7 +193,7 @@ func (s *OllamaService) GenerateJSON(prompt string) (string, error) {
 
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("ollama error (status %d): %s", resp.StatusCode, string(b))
+		return "", s.responseError(resp.StatusCode, b)
 	}
 
 	var result OllamaGenerateResponse
@@ -206,7 +228,7 @@ func (s *OllamaService) GenerateStream(prompt string, outChan chan<- string, err
 
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(resp.Body)
-		errChan <- fmt.Errorf("ollama error (status %d): %s", resp.StatusCode, string(b))
+		errChan <- s.responseError(resp.StatusCode, b)
 		return
 	}
 
@@ -220,7 +242,7 @@ func (s *OllamaService) GenerateStream(prompt string, outChan chan<- string, err
 			errChan <- err
 			return
 		}
-		
+
 		if chunk.Response != "" {
 			outChan <- chunk.Response
 		}

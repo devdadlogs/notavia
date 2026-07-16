@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Editor } from '@tiptap/react';
 import { EditorContent } from '@tiptap/react';
 import { ArrowRight, Check, ExternalLink, FilePlus2, FolderPlus, Highlighter, Loader2, Sparkles } from 'lucide-react';
@@ -35,32 +35,49 @@ const statusLabels = {
 };
 
 export default function MaterialWorkbench({ note, editor, title, onNoteChange }: Props) {
-  const shouldAutoExtract = !note.insights?.length && note.materialStatus !== 'later' && Boolean(note.contentText?.trim() || note.transcript?.trim());
   const [insights, setInsights] = useState<MaterialInsight[]>(note.insights || []);
+  const [insightStatus, setInsightStatus] = useState<'idle' | 'processing' | 'ready' | 'error'>(note.insights?.length ? 'ready' : 'idle');
   const [creatorNotes, setCreatorNotes] = useState(note.creatorNotes || '');
   const [topics, setTopics] = useState<Topic[]>([]);
   const [selectedTopic, setSelectedTopic] = useState('');
   const [newTopicTitle, setNewTopicTitle] = useState(title);
   const [showNewTopic, setShowNewTopic] = useState(false);
-  const [busy, setBusy] = useState<'insights' | 'notes' | 'topic' | 'later' | ''>(shouldAutoExtract ? 'insights' : '');
+  const [busy, setBusy] = useState<'notes' | 'topic' | 'later' | ''>('');
   const [message, setMessage] = useState('');
-  const autoExtractStarted = useRef(false);
 
   useEffect(() => {
     void creatorService.listTopics().then(setTopics).catch(() => setTopics([]));
   }, []);
 
   useEffect(() => {
-    if (!shouldAutoExtract || autoExtractStarted.current) return;
-    autoExtractStarted.current = true;
-    void creatorService.extractInsights(note.id).then(result => {
-      setInsights(result);
-      onNoteChange({ insights: result, materialStatus: note.materialStatus === 'used' ? 'used' : 'distilled' });
-      setMessage('素材价值已自动提炼，可以选择下一步。');
-    }).catch(() => {
-      setMessage('自动提炼暂时失败，可以检查模型配置后重试。');
-    }).finally(() => setBusy(''));
-  }, [note.id, note.materialStatus, onNoteChange, shouldAutoExtract]);
+    let cancelled = false;
+    void creatorService.getInsightStatus(note.id).then(result => {
+      if (cancelled) return;
+      setInsightStatus(result.status);
+      if (result.status === 'processing') setMessage('AI 正在后台阅读素材，你可以继续摘录或离开页面。');
+      if (result.status === 'error') setMessage(result.error || 'AI 提炼失败，可以重试。');
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [note.id]);
+
+  useEffect(() => {
+    if (insightStatus !== 'processing') return;
+    const interval = window.setInterval(() => {
+      void creatorService.getInsightStatus(note.id).then(result => {
+        if (result.status === 'processing') return;
+        setInsightStatus(result.status);
+        if (result.status === 'ready') {
+          const nextInsights = result.items || [];
+          setInsights(nextInsights);
+          onNoteChange({ insights: nextInsights, materialStatus: note.materialStatus === 'used' ? 'used' : 'distilled' });
+          setMessage('素材价值已提炼，可以选择下一步。');
+        } else if (result.status === 'error') {
+          setMessage(result.error || 'AI 提炼失败，可以重试。');
+        }
+      }).catch(() => setMessage('暂时无法查询提炼进度，系统会继续在后台处理。'));
+    }, 2000);
+    return () => window.clearInterval(interval);
+  }, [insightStatus, note.id, note.materialStatus, onNoteChange]);
 
   const groupedInsights = useMemo(() => {
     const groups = new Map<MaterialInsight['type'], MaterialInsight[]>();
@@ -69,15 +86,14 @@ export default function MaterialWorkbench({ note, editor, title, onNoteChange }:
   }, [insights]);
 
   const extractInsights = async () => {
-    setBusy('insights'); setMessage('');
+    setInsightStatus('processing');
+    setMessage('AI 正在后台阅读素材，你可以继续摘录或离开页面。');
     try {
-      const result = await creatorService.extractInsights(note.id);
-      setInsights(result);
-      onNoteChange({ insights: result, materialStatus: note.materialStatus === 'used' ? 'used' : 'distilled' });
-      setMessage('素材价值已提炼，可以选择下一步。');
+      await creatorService.extractInsights(note.id);
     } catch {
+      setInsightStatus('error');
       setMessage('AI 提炼失败，请检查模型配置后重试。');
-    } finally { setBusy(''); }
+    }
   };
 
   const saveCreatorNotes = async () => {
@@ -163,7 +179,7 @@ export default function MaterialWorkbench({ note, editor, title, onNoteChange }:
         <div className="material-status-row"><span className={`material-status material-status-${status}`}>{statusLabels[status]}</span><small>素材进度</small></div>
 
         <section className="material-panel-section">
-          <div className="material-section-title"><div><Sparkles size={16}/><strong>素材价值</strong></div><button onClick={extractInsights} disabled={busy === 'insights'}>{busy === 'insights' ? <Loader2 className="spin" size={14}/> : null}{insights.length ? '重新提炼' : 'AI 提炼'}</button></div>
+          <div className="material-section-title"><div><Sparkles size={16}/><strong>素材价值</strong></div><button onClick={extractInsights} disabled={insightStatus === 'processing'}>{insightStatus === 'processing' ? <Loader2 className="spin" size={14}/> : null}{insightStatus === 'processing' ? '后台提炼中' : insights.length ? '重新提炼' : 'AI 提炼'}</button></div>
           {groupedInsights.length ? <div className="material-insight-list">{groupedInsights.map(([type, items]) => <div key={type} className={`material-insight material-insight-${type}`}><span>{insightLabels[type]}</span>{items.map((item, index) => <p key={item.id || index}>{item.content}</p>)}</div>)}</div> : <div className="material-empty-value"><p>先让 AI 判断这条素材有什么价值。</p><small>它会提取观点、案例、事实风险和可写角度。</small></div>}
         </section>
 

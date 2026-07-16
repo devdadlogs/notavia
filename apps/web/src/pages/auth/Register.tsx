@@ -38,13 +38,6 @@ export default function Register() {
 
   return (
     <div style={{ backgroundColor: '#ffffff', minHeight: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-      {/* Top right link */}
-      <div style={{ position: 'absolute', top: '24px', right: '32px' }}>
-        <button onClick={() => navigate('/')} style={{ border: '1px solid #eaeaea', background: 'transparent', padding: '6px 16px', borderRadius: '20px', fontSize: '13px', cursor: 'pointer', color: '#666', transition: 'all 0.2s' }}>
-          随便看看
-        </button>
-      </div>
-
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
         <div style={{ width: '100%', maxWidth: '440px' }}>
           {/* Header */}

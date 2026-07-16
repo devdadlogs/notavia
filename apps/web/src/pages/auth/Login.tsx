@@ -37,13 +37,6 @@ export default function Login() {
 
   return (
     <div style={{ backgroundColor: '#ffffff', minHeight: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', position: 'relative' }}>
-      {/* Top right link */}
-      <div style={{ position: 'absolute', top: '24px', right: '32px' }}>
-        <button onClick={() => navigate('/')} style={{ border: '1px solid #eaeaea', background: 'transparent', padding: '6px 16px', borderRadius: '20px', fontSize: '13px', cursor: 'pointer', color: '#666', transition: 'all 0.2s' }}>
-          随便看看
-        </button>
-      </div>
-
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
         <div style={{ width: '100%', maxWidth: '440px' }}>
           {/* Header */}
@@ -147,22 +140,6 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Other login methods (Visual mock) */}
-      <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingBottom: '60px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: '320px', marginBottom: '24px' }}>
-          <div style={{ flex: 1, height: '1px', backgroundColor: '#f0f0f0' }}></div>
-          <span style={{ padding: '0 16px', fontSize: '12px', color: '#bbb' }}>其他登录方式</span>
-          <div style={{ flex: 1, height: '1px', backgroundColor: '#f0f0f0' }}></div>
-        </div>
-        <div style={{ display: 'flex', gap: '16px' }}>
-          <div style={{ width: '40px', height: '40px', borderRadius: '50%', border: '1px solid #eaeaea', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#22c55e' }}>
-            <span style={{ fontSize: '12px', fontWeight: 600 }}>We</span>
-          </div>
-          <div style={{ width: '40px', height: '40px', borderRadius: '50%', border: '1px solid #eaeaea', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#111' }}>
-            <span style={{ fontSize: '12px', fontWeight: 600 }}>Ap</span>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

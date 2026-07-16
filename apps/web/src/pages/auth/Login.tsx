@@ -114,7 +114,7 @@ export default function Login() {
               {isLoading ? '登录中...' : '登录'}
             </button>
 
-            <p style={{fontSize:12,color:'#999',lineHeight:1.7,marginTop:16}}>登录即表示你将按照已接受的 <Link to="/legal/terms" target="_blank">《用户协议》</Link> 使用本实例。隐私处理方式见 <Link to="/legal/privacy" target="_blank">《隐私政策》</Link>。</p>
+            <p style={{fontSize:12,color:'#999',lineHeight:1.7,marginTop:16}}>登录即表示你已接受 <Link to="/legal/terms" style={{color:'#444',textDecorationColor:'#aaa'}}>《用户协议》</Link> 和 <Link to="/legal/privacy" style={{color:'#444',textDecorationColor:'#aaa'}}>《隐私政策》</Link>。</p>
           </form>
         </div>
       </div>

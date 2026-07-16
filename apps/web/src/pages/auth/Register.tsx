@@ -161,7 +161,7 @@ export default function Register() {
                 <Circle size={14} color="#ccc" />
               )}
               <span style={{ fontSize: '12px', color: '#888', marginLeft: '8px' }}>
-                我已阅读并同意 <Link onClick={e=>e.stopPropagation()} to="/legal/terms" target="_blank" style={{color:'#333'}}>《用户协议》</Link> 和 <Link onClick={e=>e.stopPropagation()} to="/legal/privacy" target="_blank" style={{color:'#333'}}>《隐私政策》</Link>
+                我已阅读并同意 <Link onClick={e=>e.stopPropagation()} to="/legal/terms" style={{color:'#333',textDecorationColor:'#aaa'}}>《用户协议》</Link> 和 <Link onClick={e=>e.stopPropagation()} to="/legal/privacy" style={{color:'#333',textDecorationColor:'#aaa'}}>《隐私政策》</Link>
               </span>
             </div>
           </form>

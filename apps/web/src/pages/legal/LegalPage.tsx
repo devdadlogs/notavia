@@ -40,9 +40,10 @@ export default function LegalPage({ type }: { type: 'terms' | 'privacy' }) {
   const navigate = useNavigate();
   const isTerms = type === 'terms';
   const sections = isTerms ? terms : privacy;
+  const goBack = () => window.history.length > 1 ? navigate(-1) : navigate('/auth/register');
   return <main className="legal-page">
     <header className="legal-header">
-      <button onClick={() => navigate(-1)}><ArrowLeft size={17}/>返回</button>
+      <button onClick={goBack}><ArrowLeft size={17}/>返回</button>
       <div><ShieldCheck size={19}/><span>Notavia · 私有部署</span></div>
     </header>
     <article className="legal-document">

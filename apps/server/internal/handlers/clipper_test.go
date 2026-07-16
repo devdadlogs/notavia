@@ -74,6 +74,20 @@ func TestFetchClipperHTMLRetriesWhenResponseBodyTimesOut(t *testing.T) {
 	}
 }
 
+func TestExtractClippedTitleUsesOpenGraphMetadata(t *testing.T) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(`<html><head>
+<title>微信公众平台</title>
+<meta property="og:title" content="下单30罐茉莉花茶后，顾客却说：不用发货">
+</head></html>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got := extractClippedTitle(doc); got != "下单30罐茉莉花茶后，顾客却说：不用发货" {
+		t.Fatalf("unexpected clipped title: %q", got)
+	}
+}
+
 func TestPreserveArticleAssetsLocalizesImagesAndKeepsStructure(t *testing.T) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(`<article>
 <h2>标题</h2><p><strong>重点</strong></p>

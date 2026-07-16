@@ -324,6 +324,10 @@ body {
 .material-card:hover { transform:translateY(-3px); border-color:#d7d3ff; box-shadow:0 16px 35px rgba(34,39,76,.09); }
 .material-card-top { display:flex; justify-content:space-between; align-items:center; }
 .material-card-top a { color:var(--text-tertiary); }
+.material-card-tools { display:flex; align-items:center; gap:10px; }
+.material-card-tools a,.material-card-tools button { display:flex; align-items:center; justify-content:center; border:0; background:transparent; color:var(--text-tertiary); padding:3px; cursor:pointer; border-radius:6px; }
+.material-card-tools a:hover { color:#5e55d5; background:#f1efff; }
+.material-card-tools button:hover { color:#dc2626; background:#fef2f2; }
 .source-badge { display:inline-flex; padding:4px 8px; border-radius:6px; background:#f0efff; color:#6559e8; font-size:11px; font-weight:700; }
 .source-audio { background:#e9f8f5; color:#198875; }
 .source-manual { background:#f5f2ea; color:#8a7041; }

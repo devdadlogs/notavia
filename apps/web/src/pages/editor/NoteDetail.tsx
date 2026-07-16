@@ -16,7 +16,7 @@ import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table
 import { Markdown } from 'tiptap-markdown';
 import api, { uploadFile } from '../../services/api';
 import { compressImage } from '../../utils/imageCompressor';
-import { ChevronLeft, Gift, MoreVertical, Play, FastForward, Edit3, Sparkles, MessageSquarePlus, Menu, Wifi, WifiOff, Loader2, Pause, Volume2, Mic } from 'lucide-react';
+import { ChevronLeft, Gift, MoreVertical, Play, FastForward, Edit3, Sparkles, MessageSquarePlus, Menu, Wifi, WifiOff, Loader2, Pause, Volume2, Mic, Trash2 } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
 import AIPanel from '../../components/editor/AIPanel';
 import EditorToolbar from '../../components/editor/EditorToolbar';
@@ -89,6 +89,16 @@ export default function NoteDetail() {
   const audioChunksRef = useRef<Blob[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+
+  const trashNote = async () => {
+    if (!id || !window.confirm(`确定将“${title || '无标题素材'}”移到最近删除吗？`)) return;
+    try {
+      await api.delete(`/notes/${id}`);
+      navigate('/materials');
+    } catch {
+      window.alert('删除失败，请稍后重试');
+    }
+  };
 
   const startRecording = async () => {
     try {
@@ -564,6 +574,15 @@ export default function NoteDetail() {
           </button>
         </div>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => void trashNote()}
+            aria-label="删除素材"
+            title="移到最近删除"
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', display: 'flex', padding: '8px', borderRadius: '8px' }}
+          >
+            <Trash2 size={18} />
+          </button>
           {/* Corner Sync Indicator */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: '6px',

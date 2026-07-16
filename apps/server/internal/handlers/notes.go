@@ -684,11 +684,7 @@ func WebClipper(c *gin.Context) {
 		return
 	}
 
-	title := doc.Find("title").Text()
-	if title == "" {
-		title = "Clipped Article"
-	}
-	title = strings.TrimSpace(title)
+	title := extractClippedTitle(doc)
 
 	// Targeted extraction for better results (especially for docs)
 	var contentSource *goquery.Selection
@@ -800,6 +796,23 @@ func WebClipper(c *gin.Context) {
 	config.DB.Preload("Tags.Tag").First(&note, "id = ?", note.ID)
 
 	c.JSON(http.StatusCreated, note)
+}
+
+func extractClippedTitle(doc *goquery.Document) string {
+	candidates := []string{
+		doc.Find(`meta[property="og:title"]`).First().AttrOr("content", ""),
+		doc.Find(`meta[property="twitter:title"]`).First().AttrOr("content", ""),
+		doc.Find(`meta[name="twitter:title"]`).First().AttrOr("content", ""),
+		doc.Find(`meta[name="title"]`).First().AttrOr("content", ""),
+		doc.Find("title").First().Text(),
+		doc.Find("h1").First().Text(),
+	}
+	for _, candidate := range candidates {
+		if title := strings.Join(strings.Fields(candidate), " "); title != "" {
+			return title
+		}
+	}
+	return "Clipped Article"
 }
 
 func GetStats(c *gin.Context) {

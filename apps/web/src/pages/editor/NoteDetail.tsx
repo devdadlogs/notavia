@@ -79,6 +79,7 @@ export default function NoteDetail() {
   const [duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLTextAreaElement>(null);
   
   const [showSaveToast, setShowSaveToast] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -504,7 +505,14 @@ export default function NoteDetail() {
     return () => clearInterval(intervalId);
   }, [id, noteData?.audioUrl, noteData?.transcript]);
 
-  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  useEffect(() => {
+    const input = titleInputRef.current;
+    if (!input) return;
+    input.style.height = 'auto';
+    input.style.height = `${input.scrollHeight}px`;
+  }, [title]);
+
+  const handleTitleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newTitle = e.target.value;
     setTitle(newTitle);
     if (editor) saveNote(newTitle, editor.getJSON(), editor.getText());
@@ -613,12 +621,19 @@ export default function NoteDetail() {
                 <Mic size={18} />
               </span>
             )}
-            <input 
-              type="text" 
+            <textarea
+              ref={titleInputRef}
+              rows={1}
               className="note-title-input" 
               placeholder="无标题笔记" 
               value={title} 
               onChange={handleTitleChange}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+              }}
               style={{ flex: 1 }}
             />
           </div>

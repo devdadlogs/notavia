@@ -34,6 +34,17 @@ func TestCreatorDomainValues(t *testing.T) {
 	}
 }
 
+func TestMaterialStatusValues(t *testing.T) {
+	for _, status := range []string{"inbox", "distilled", "used", "later"} {
+		if !validMaterialStatus(status) {
+			t.Fatalf("expected valid material status %q", status)
+		}
+	}
+	if validMaterialStatus("published") {
+		t.Fatal("unsupported material status must be rejected")
+	}
+}
+
 func setupCreatorTestDB(t *testing.T) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
@@ -101,5 +112,32 @@ func TestCitationMarkersMustExistAndBeUnique(t *testing.T) {
 	got := validateCitationMarkers("正文 [^1]", items)
 	if len(got) != 1 || got[0].Marker != "[^1]" {
 		t.Fatalf("unexpected citations: %#v", got)
+	}
+}
+
+func TestAddingMaterialToTopicMarksItUsed(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupCreatorTestDB(t)
+	topic := models.Topic{ID: "topic-a", UserID: "user-a", Title: "测试选题", Status: "idea"}
+	note := models.Note{ID: "note-a", UserID: "user-a", Title: "测试素材", MaterialStatus: "distilled"}
+	config.DB.Create(&topic)
+	config.DB.Create(&note)
+
+	payload, _ := json.Marshal(map[string]string{"noteId": note.ID})
+	req := httptest.NewRequest(http.MethodPost, "/topics/topic-a/materials", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+	c.Params = gin.Params{{Key: "id", Value: topic.ID}}
+	c.Set("userID", topic.UserID)
+	AddTopicMaterial(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("add material: %d %s", w.Code, w.Body.String())
+	}
+	config.DB.First(&note, "id = ?", note.ID)
+	if note.MaterialStatus != "used" {
+		t.Fatalf("expected material status used, got %q", note.MaterialStatus)
 	}
 }

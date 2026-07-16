@@ -82,6 +82,8 @@ type Note struct {
 	SourceType        string    `json:"sourceType" gorm:"default:'manual';index"`
 	SourceURL         string    `json:"sourceUrl" gorm:"type:text"`
 	SourceHTML        string    `json:"sourceHtml" gorm:"type:text"`
+	CreatorNotes      string    `json:"creatorNotes" gorm:"type:text"`
+	MaterialStatus    string    `json:"materialStatus" gorm:"default:'inbox';index"`
 	WordCount         int       `json:"wordCount" gorm:"default:0"`
 	IsPinned          bool      `json:"isPinned" gorm:"default:false"`
 	IsTrashed         bool      `json:"isTrashed" gorm:"default:false"`
@@ -89,9 +91,10 @@ type Note struct {
 	CreatedAt         time.Time `json:"createdAt" gorm:"autoCreateTime"`
 	UpdatedAt         time.Time `json:"updatedAt" gorm:"autoUpdateTime"`
 
-	User     User      `json:"-" gorm:"foreignKey:UserID"`
-	Notebook *Notebook `json:"notebook,omitempty" gorm:"foreignKey:NotebookID"`
-	Tags     []NoteTag `json:"tags,omitempty" gorm:"foreignKey:NoteID"`
+	User     User              `json:"-" gorm:"foreignKey:UserID"`
+	Notebook *Notebook         `json:"notebook,omitempty" gorm:"foreignKey:NotebookID"`
+	Tags     []NoteTag         `json:"tags,omitempty" gorm:"foreignKey:NoteID"`
+	Insights []MaterialInsight `json:"insights,omitempty" gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"`
 }
 
 type Topic struct {

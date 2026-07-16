@@ -35,15 +35,21 @@ type CreateNoteInput struct {
 }
 
 type UpdateNoteInput struct {
-	Title       *string `json:"title"`
-	ContentJSON *string `json:"contentJson"`
-	ContentText *string `json:"contentText"`
-	CoverImage  *string `json:"coverImage"`
-	Icon        *string `json:"icon"`
-	IsPinned    *bool   `json:"isPinned"`
-	IsTrashed   *bool   `json:"isTrashed"`
-	Transcript  *string `json:"transcript"`
+	Title          *string `json:"title"`
+	ContentJSON    *string `json:"contentJson"`
+	ContentText    *string `json:"contentText"`
+	CoverImage     *string `json:"coverImage"`
+	Icon           *string `json:"icon"`
+	IsPinned       *bool   `json:"isPinned"`
+	IsTrashed      *bool   `json:"isTrashed"`
+	Transcript     *string `json:"transcript"`
+	CreatorNotes   *string `json:"creatorNotes"`
+	MaterialStatus *string `json:"materialStatus"`
 }
+
+var materialStatuses = map[string]bool{"inbox": true, "distilled": true, "used": true, "later": true}
+
+func validMaterialStatus(value string) bool { return materialStatuses[value] }
 
 // --- Handlers ---
 
@@ -348,7 +354,7 @@ func GetNote(c *gin.Context) {
 	noteID := c.Param("id")
 
 	var note models.Note
-	if err := config.DB.Preload("Tags.Tag").Where("id = ? AND user_id = ?", noteID, userID).First(&note).Error; err != nil {
+	if err := config.DB.Preload("Tags.Tag").Preload("Insights").Where("id = ? AND user_id = ?", noteID, userID).First(&note).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Note not found"})
 		return
 	}
@@ -397,6 +403,16 @@ func UpdateNote(c *gin.Context) {
 	}
 	if input.Transcript != nil {
 		updates["transcript"] = *input.Transcript
+	}
+	if input.CreatorNotes != nil {
+		updates["creator_notes"] = strings.TrimSpace(*input.CreatorNotes)
+	}
+	if input.MaterialStatus != nil {
+		if !validMaterialStatus(*input.MaterialStatus) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid material status"})
+			return
+		}
+		updates["material_status"] = *input.MaterialStatus
 	}
 
 	// Auto-increment version

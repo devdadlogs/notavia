@@ -5,7 +5,15 @@ export type Platform = 'zhihu' | 'xiaohongshu' | 'short_video';
 
 export interface Material {
   id: string; title: string; contentText: string; transcript?: string;
-  sourceType?: string; sourceUrl?: string; updatedAt: string;
+  transcriptSummary?: string; sourceType?: string; sourceUrl?: string; sourceHtml?: string;
+  audioUrl?: string; creatorNotes?: string; materialStatus?: 'inbox' | 'distilled' | 'used' | 'later';
+  insights?: MaterialInsight[]; updatedAt: string;
+}
+
+export interface MaterialInsight {
+  id?: string;
+  type: 'summary' | 'relevance' | 'viewpoint' | 'case' | 'experience' | 'fact' | 'verify' | 'angle';
+  content: string;
 }
 
 export interface Citation {

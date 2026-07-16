@@ -175,7 +175,12 @@ func AddTopicMaterial(c *gin.Context) {
 		return
 	}
 	link := models.TopicMaterial{TopicID: topicID, NoteID: input.NoteID}
-	if err := config.DB.FirstOrCreate(&link).Error; err != nil {
+	if err := config.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.FirstOrCreate(&link).Error; err != nil {
+			return err
+		}
+		return tx.Model(&models.Note{}).Where("id = ? AND user_id = ?", input.NoteID, userID).Update("material_status", "used").Error
+	}); err != nil {
 		c.JSON(500, gin.H{"error": "failed to add material"})
 		return
 	}

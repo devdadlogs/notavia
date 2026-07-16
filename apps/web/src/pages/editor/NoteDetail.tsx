@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useEditor, EditorContent } from '@tiptap/react';
+import { useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import TaskList from '@tiptap/extension-task-list';
@@ -11,18 +11,14 @@ import Highlight from '@tiptap/extension-highlight';
 import { ResizableImage } from '../../components/editor/extensions/ResizableImage';
 import { Video } from '../../components/editor/extensions/Video';
 import { Audio } from '../../components/editor/extensions/Audio';
-import WebSnapshot from '../../components/editor/WebSnapshot';
 import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
 import { Markdown } from 'tiptap-markdown';
 import api, { uploadFile } from '../../services/api';
 import { compressImage } from '../../utils/imageCompressor';
-import { ChevronLeft, Gift, MoreVertical, Play, FastForward, Edit3, Sparkles, MessageSquarePlus, Menu, Wifi, WifiOff, Loader2, Pause, Volume2, Mic, Trash2, ExternalLink } from 'lucide-react';
+import { ChevronLeft, Play, FastForward, Sparkles, Menu, Pause, Mic, Trash2 } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
 import AIPanel from '../../components/editor/AIPanel';
-import EditorToolbar from '../../components/editor/EditorToolbar';
-import AISlashCommand from '../../components/editor/AISlashCommand';
-import { BlockHoverControls } from '../../components/editor/BlockHoverControls';
-import { aiService } from '../../services/ai';
+import MaterialWorkbench from '../../components/editor/MaterialWorkbench';
 
 // Yjs Imports
 import * as Y from 'yjs';
@@ -65,14 +61,8 @@ export default function NoteDetail() {
     }
   };
   const [title, setTitle] = useState('');
-  const [activeTab, setActiveTab] = useState('note');
   const [showAIPanel, setShowAIPanel] = useState(false);
   const [syncState, setSyncState] = useState<'connecting' | 'connected' | 'offline'>('connecting');
-  const [sproutResults, setSproutResults] = useState<any[]>([]);
-  const [isSprouting, setIsSprouting] = useState(false);
-  const [isEditingTranscript, setIsEditingTranscript] = useState(false);
-  const [editTranscriptText, setEditTranscriptText] = useState("");
-  const [appendText, setAppendText] = useState("");
   
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -191,31 +181,6 @@ export default function NoteDetail() {
       setNoteData((prev: any) => prev ? { ...prev, audioUrl: data.audioUrl } : null);
     } catch (err) {
       console.error('Audio upload failed', err);
-    }
-  };
-
-  const handleSprout = async () => {
-    setActiveTab('note');
-    if (!editor) return;
-
-    const text = editor.getText({ blockSeparator: '\n' });
-    if (text.length < 50) {
-      alert("🌱 笔记内容太短啦！再多写一点（至少 50 字），AI 才能准确感知你的思想，为你跨越时空召回相关的灵感。");
-      return;
-    }
-
-    // Scroll to bottom where results will appear
-    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-
-    // Manually trigger a fresh sprout calculation
-    setIsSprouting(true);
-    try {
-      const results = await aiService.sprout(id!, text);
-      setSproutResults(results);
-    } catch (err) {
-      console.error('Manual sprout failed', err);
-    } finally {
-      setIsSprouting(false);
     }
   };
 
@@ -416,35 +381,6 @@ export default function NoteDetail() {
     return () => window.removeEventListener('online', handleOnline);
   }, [editor, saveNote, title]);
 
-  // Auto-sprout effect (Semantic Bi-linking)
-  useEffect(() => {
-    if (!editor || editor.isDestroyed || activeTab !== 'note') return;
-
-    try {
-      const text = editor.getText({ blockSeparator: '\n' });
-      if (text.length < 50) {
-        setSproutResults([]);
-        return;
-      }
-
-      const timer = setTimeout(async () => {
-        setIsSprouting(true);
-        try {
-          const results = await aiService.sprout(id!, text);
-          setSproutResults(results);
-        } catch (err) {
-          console.error('Auto sprout failed', err);
-        } finally {
-          setIsSprouting(false);
-        }
-      }, 2000); // 2 seconds of inactivity triggers semantic search
-
-      return () => clearTimeout(timer);
-    } catch (e) {
-      // Editor schema might not be fully initialized yet
-    }
-  }, [editor, editor?.state?.doc?.content?.size, activeTab, id]);
-
   // Load Note Metadata — only populate editor AFTER ALL Yjs providers sync
   useEffect(() => {
     const loadNote = async () => {
@@ -452,7 +388,6 @@ export default function NoteDetail() {
         const { data } = await api.get(`/notes/${id}`);
         setNoteData(data);
         setTitle(data.title === 'Untitled' ? '' : data.title);
-        setActiveTab(data.sourceType === 'web' && data.sourceHtml ? 'source' : 'note');
         
         if (!editor || editor.isDestroyed) return;
 
@@ -553,17 +488,6 @@ export default function NoteDetail() {
 
   if (!editor || !noteData) return <div style={{ padding: '40px', textAlign: 'center' }}>加载中...</div>;
 
-  // Deduplicate sprout results by noteId and apply a stricter similarity threshold (0.75)
-  const uniqueSprouts = sproutResults
-    .filter(r => r.score >= 0.75)
-    .reduce((acc: any[], current: any) => {
-      if (!acc.find(item => item.noteId === current.noteId)) {
-        acc.push(current);
-      }
-      return acc;
-    }, [])
-    .slice(0, 3);
-
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-panel)', position: 'relative' }}>
       
@@ -611,7 +535,7 @@ export default function NoteDetail() {
       </header>
 
       {/* Main Content Scroll Area */}
-      <main style={{ flex: 1, overflowY: 'auto', padding: '32px 5%', display: 'flex', flexDirection: 'column' }}>
+      <main className="note-detail-main" style={{ flex: 1, overflowY: 'auto', padding: '32px 5%', display: 'flex', flexDirection: 'column' }}>
         
         {/* Note Header Info */}
         <div className="note-header-layout">
@@ -687,7 +611,7 @@ export default function NoteDetail() {
           </div>
 
           {/* Audio Player Area */}
-          <div style={{ display: 'flex', alignItems: 'center', backgroundColor: 'var(--bg-input)', padding: '16px 24px', borderRadius: 'var(--radius-pill)', gap: '24px' }}>
+          <div className={`note-audio-source ${!noteData?.audioUrl && noteData?.sourceType === 'web' ? 'note-audio-source-hidden' : ''}`} style={{ display: 'flex', alignItems: 'center', backgroundColor: 'var(--bg-input)', padding: '16px 24px', borderRadius: 'var(--radius-pill)', gap: '24px' }}>
             <input 
               type="file" 
               ref={fileInputRef} 
@@ -781,146 +705,13 @@ export default function NoteDetail() {
           </div>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="note-tabs">
-          {noteData?.sourceType === 'web' && noteData?.sourceHtml && (
-            <div className={`note-tab ${activeTab === 'source' ? 'active' : ''}`} onClick={() => setActiveTab('source')}>原始素材</div>
-          )}
-          <div className={`note-tab ${activeTab === 'transcript' ? 'active' : ''}`} onClick={() => setActiveTab('transcript')}>录音原文</div>
-          <div className={`note-tab ${activeTab === 'note' ? 'active' : ''}`} onClick={() => setActiveTab('note')}>笔记内容</div>
-          {noteData?.sourceType === 'web' && noteData?.sourceUrl && (
-            <a className="note-source-link" href={noteData.sourceUrl} target="_blank" rel="noreferrer">
-              <ExternalLink size={14} /> 打开来源
-            </a>
-          )}
-        </div>
-
-        {/* Tab Content Area */}
-        <div style={{ flex: 1 }}>
-          {activeTab === 'source' && noteData?.sourceHtml && (
-            <WebSnapshot html={noteData.sourceHtml} sourceUrl={noteData.sourceUrl} />
-          )}
-          {activeTab === 'note' && (
-            <div>
-              <EditorToolbar editor={editor} noteTitle={title} />
-              <BlockHoverControls editor={editor} />
-              <AISlashCommand editor={editor} />
-              <div style={{ width: '100%' }}>
-                <EditorContent editor={editor} />
-              </div>
-              {/* Auto Sprout Recommendations */}
-              {editor && editor.getText().length > 50 && (
-                <div className="fade-in" style={{ marginTop: '64px', paddingTop: '32px', borderTop: '1px dashed var(--border-color)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', color: 'var(--text-tertiary)' }}>
-                    <Sparkles size={16} color="var(--accent-color)" />
-                    <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--accent-color)' }}>灵感发芽 (相关笔记)</span>
-                  </div>
-                  {isSprouting ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-tertiary)', fontSize: '13px' }}>
-                      <Loader2 size={14} className="spin" /> 正在深入你的知识库为你寻找共鸣...
-                    </div>
-                  ) : uniqueSprouts.length > 0 ? (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
-                      {uniqueSprouts.map((result: any) => (
-                        <div key={result.noteId} className="card card-hoverable" style={{ padding: '16px', cursor: 'pointer', borderTop: '3px solid var(--accent-light)', backgroundColor: 'var(--bg-input)' }} onClick={() => navigate(`/n/${result.noteId}`)}>
-                          <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: 'var(--text-primary)' }}>{result.title || '无标题'}</h4>
-                          <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-secondary)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                            {result.content.replace(/【笔记标题：.*?】\n/, '')}
-                          </p>
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
-                            <span style={{ fontSize: '11px', color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-color)', padding: '2px 6px', borderRadius: '4px' }}>
-                              相关度: {(result.score * 100).toFixed(1)}%
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: '13px', color: 'var(--text-tertiary)' }}>暂无高度相关的笔记</div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-          {activeTab === 'transcript' && (
-            <div className="fade-in" style={{ padding: '24px 0', lineHeight: 1.8, color: 'var(--text-primary)' }}>
-              {noteData?.transcript ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {noteData.transcriptSummary && (
-                    <div style={{ padding: '16px', backgroundColor: 'var(--bg-input)', borderRadius: '12px', fontSize: '14px' }}>
-                      <p style={{ marginBottom: '8px', fontWeight: 600 }}>AI 自动生成摘要：</p>
-                      <p style={{ color: 'var(--text-secondary)' }}>{noteData.transcriptSummary}</p>
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <p style={{ margin: 0, fontWeight: 600 }}>录音原文：</p>
-                    {!isEditingTranscript && (
-                      <button className="btn btn-outline" style={{ padding: '4px 12px', fontSize: '13px' }} onClick={() => {
-                        setEditTranscriptText(noteData.transcript);
-                        setIsEditingTranscript(true);
-                      }}>
-                        <Edit3 size={14} style={{ marginRight: '4px' }} /> 编辑原文
-                      </button>
-                    )}
-                  </div>
-                  {isEditingTranscript ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      <textarea 
-                        value={editTranscriptText}
-                        onChange={(e) => setEditTranscriptText(e.target.value)}
-                        style={{ 
-                          width: '100%', 
-                          minHeight: '400px', 
-                          padding: '16px', 
-                          backgroundColor: '#fff', 
-                          border: '1px solid var(--accent-color)', 
-                          borderRadius: '12px', 
-                          fontSize: '14px', 
-                          lineHeight: '1.8', 
-                          color: 'var(--text-primary)', 
-                          resize: 'vertical', 
-                          outline: 'none', 
-                          fontFamily: 'inherit',
-                          boxShadow: '0 0 0 2px rgba(79, 70, 229, 0.1)'
-                        }} 
-                      />
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                        <button className="btn btn-outline" onClick={() => setIsEditingTranscript(false)}>取消</button>
-                        <button className="btn btn-primary" onClick={async () => {
-                          if (editTranscriptText !== noteData.transcript) {
-                            try {
-                              await api.put(`/notes/${id}`, { transcript: editTranscriptText });
-                              setNoteData((prev: any) => ({ ...prev, transcript: editTranscriptText }));
-                            } catch (err) {
-                              console.error('Failed to update transcript', err);
-                            }
-                          }
-                          setIsEditingTranscript(false);
-                        }}>保存修改</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.8', padding: '16px', backgroundColor: 'var(--bg-panel)', border: '1px solid var(--border-color)', borderRadius: '12px', fontSize: '14px' }}>
-                      {noteData.transcript}
-                    </div>
-                  )}
-                </div>
-              ) : noteData?.audioUrl ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 0', gap: '16px', color: 'var(--text-secondary)' }}>
-                  <span className="spin" style={{ color: 'var(--primary-color)' }}><Loader2 size={32} /></span>
-                  <p style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>正在通过 AI 提取语音内容...</p>
-                  <p style={{ fontSize: '13px', textAlign: 'center', maxWidth: '400px' }}>
-                    这可能需要几秒到一分钟的时间，请稍候刷新查看结果。
-                  </p>
-                </div>
-              ) : (
-                <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-tertiary)' }}>
-                  请先上传录音文件以生成原文
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        {noteData && <MaterialWorkbench
+          key={noteData.id}
+          note={noteData}
+          editor={editor}
+          title={title}
+          onNoteChange={(patch) => setNoteData((current: any) => ({ ...current, ...patch }))}
+        />}
       </main>
 
       {/* AI Assistant Side Button */}

@@ -42,7 +42,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm licenses list --prod
-      - uses: anchore/sbom-action@v0.20.11
+      - uses: anchore/sbom-action@v0.24.0
         with:
           path: .
           artifact-name: notavia-sbom.spdx.json

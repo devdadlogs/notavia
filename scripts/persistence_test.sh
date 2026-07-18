@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/persistence.sh"
 
-TMP_ROOT="$(mktemp -d)"
+TMP_ROOT="$(mktemp -d "$SCRIPT_DIR/../.notavia-test.XXXXXX")"
 trap 'rm -rf "$TMP_ROOT"' EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }

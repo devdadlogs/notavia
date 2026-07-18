@@ -26,7 +26,9 @@ type User struct {
 	// LLM Configuration
 	LLMProvider           string     `json:"llmProvider" gorm:"default:'ollama'"`
 	OpenAIBaseURL         string     `json:"openAiBaseUrl"`
-	OpenAIKey             string     `json:"openAiKey"`
+	OpenAIKey             string     `json:"-"`
+	OpenAIKeyCiphertext   string     `json:"-" gorm:"type:text"`
+	OpenAIKeyHint         string     `json:"-" gorm:"type:varchar(8)"`
 	OpenAIModel           string     `json:"openAiModel"`
 	TermsVersion          string     `json:"termsVersion"`
 	PrivacyVersion        string     `json:"privacyVersion"`
@@ -39,6 +41,13 @@ type User struct {
 	Notes       []Note       `json:"notes,omitempty" gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
 	Tags        []Tag        `json:"tags,omitempty" gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
 	AiUsageLogs []AiUsageLog `json:"aiUsageLogs,omitempty" gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
+}
+
+// InstanceOwner is a singleton claim used to make first-user registration atomic.
+type InstanceOwner struct {
+	ID        string    `json:"-" gorm:"primaryKey;type:varchar(16)"`
+	UserID    string    `json:"userId" gorm:"uniqueIndex;not null;type:varchar(36)"`
+	CreatedAt time.Time `json:"createdAt" gorm:"autoCreateTime"`
 }
 
 type LegalAcceptance struct {

@@ -25,6 +25,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [llmProvider, setLlmProvider] = useState('ollama');
   const [openAiBaseUrl, setOpenAiBaseUrl] = useState('');
   const [openAiKey, setOpenAiKey] = useState('');
+  const [clearOpenAiKey, setClearOpenAiKey] = useState(false);
   const [openAiModel, setOpenAiModel] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isReindexing, setIsReindexing] = useState(false);
@@ -38,7 +39,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       
       const savedBaseUrl = user.openAiBaseUrl || '';
       setOpenAiBaseUrl(savedBaseUrl);
-      setOpenAiKey(user.openAiKey || '');
+      setOpenAiKey('');
+      setClearOpenAiKey(false);
       setOpenAiModel(user.openAiModel || '');
       setCloudConsent(Boolean(user.cloudAiConsentAt));
 
@@ -91,7 +93,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       const response = await api.put('/auth/me/llm-config', {
         llmProvider,
         openAiBaseUrl,
-        openAiKey,
+        ...(openAiKey ? { openAiKey } : {}),
+        clearOpenAiKey,
         openAiModel,
         cloudAiConsent: cloudConsent,
       });
@@ -101,7 +104,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         updateUser({
           llmProvider,
           openAiBaseUrl,
-          openAiKey,
+          openAiKeyConfigured: openAiKey ? true : user?.openAiKeyConfigured,
           openAiModel,
         });
       }
@@ -211,9 +214,18 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   type="password" 
                   value={openAiKey} 
                   onChange={(e) => setOpenAiKey(e.target.value)}
-                  placeholder="sk-..."
+                  placeholder={user?.openAiKeyConfigured ? '已安全保存；留空表示不修改' : 'sk-...'}
                   style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-panel)', outline: 'none' }}
                 />
+                {user?.openAiKeyConfigured && (
+                  <button
+                    type="button"
+                    onClick={() => { setClearOpenAiKey(!clearOpenAiKey); setOpenAiKey(''); }}
+                    style={{ marginTop: '8px', border: 0, background: 'none', color: clearOpenAiKey ? '#dc2626' : 'var(--text-secondary)', cursor: 'pointer', padding: 0, fontSize: '12px' }}
+                  >
+                    {clearOpenAiKey ? '保存后将删除已存密钥（点击撤销）' : '删除已保存的密钥'}
+                  </button>
+                )}
               </div>
 
               {selectedProviderId !== 'custom' ? (

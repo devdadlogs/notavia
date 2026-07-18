@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuthStore } from '../../stores/authStore';
@@ -12,12 +12,23 @@ export default function Register() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  const [registrationAllowed, setRegistrationAllowed] = useState<boolean | null>(null);
   
   const navigate = useNavigate();
   const checkAuth = useAuthStore(state => state.checkAuth);
 
+  useEffect(() => {
+    api.get('/auth/registration-status')
+      .then(({ data }) => setRegistrationAllowed(Boolean(data.allowed)))
+      .catch(() => setRegistrationAllowed(false));
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!registrationAllowed) {
+      setError('当前实例已关闭注册，请联系实例管理员。');
+      return;
+    }
     if (!agreed) {
       setError('请先阅读并同意《用户协议》和《隐私政策》');
       return;
@@ -115,8 +126,8 @@ export default function Register() {
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
-                minLength={6}
-                placeholder="设置密码（至少6位）"
+                minLength={12}
+                placeholder="设置密码（至少12位）"
                 style={{ 
                   width: '100%', padding: '16px 20px', backgroundColor: '#f5f6f8', 
                   border: '1px solid transparent', borderRadius: '12px', fontSize: '15px',
@@ -138,6 +149,7 @@ export default function Register() {
             {/* Submit Button */}
             <button 
               type="submit" 
+              disabled={registrationAllowed !== true || isLoading}
               style={{ 
                 width: '100%', padding: '16px', backgroundColor: '#111', 
                 color: '#fff', border: 'none', borderRadius: '12px', fontSize: '16px', fontWeight: 500,
@@ -145,7 +157,7 @@ export default function Register() {
                 opacity: isLoading ? 0.7 : 1
               }}
             >
-              {isLoading ? '注册中...' : '注册'}
+              {registrationAllowed === null ? '检查注册状态...' : isLoading ? '注册中...' : registrationAllowed ? '注册' : '当前实例已关闭注册'}
             </button>
 
             {/* Agreement */}

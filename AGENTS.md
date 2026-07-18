@@ -9,16 +9,15 @@ Notavia is a pnpm workspace with a React frontend and Go backend.
 - `apps/server/cmd/server/`: Go service entrypoint.
 - `apps/server/internal/`: backend configuration, handlers, middleware, models, services, and `*_test.go` files.
 - `docker-compose.yml`: complete local stack, including Ollama, Qdrant, Whisper, Redis, API, and web services.
-- `apps/server-legacy/`: historical implementation; avoid adding new functionality here.
 
 ## Build, Test, and Development Commands
 
 Use Node 22 and pnpm 9.
 
 ```bash
-pnpm install
-./start-frontend.sh                  # Vite on localhost:5173
-./start-backend.sh                   # API on localhost:3001
+pnpm install --frozen-lockfile
+pnpm --filter web dev                # Vite on localhost:5173
+cd apps/server && go run ./cmd/server # API on localhost:3001
 pnpm --filter web lint
 pnpm --filter web build              # type-check and production build
 cd apps/server && go test ./...

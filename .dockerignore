@@ -1,0 +1,14 @@
+.git
+.github
+.env
+.env.*
+!.env.example
+**/node_modules
+**/dist
+**/coverage
+**/data
+**/uploads
+**/*.db*
+**/*.har
+apps/server/bin
+.notavia-data

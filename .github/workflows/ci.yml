@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/server/go.mod
+          cache-dependency-path: apps/server/go.sum
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - run: go test ./...
+      - run: go test -race ./...
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter web lint
+      - run: pnpm --filter web build
+
+  deployment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ShellCheck
+        uses: ludeeus/action-shellcheck@2.0.0
+      - run: bash scripts/persistence_test.sh
+      - run: bash scripts/compose_security_test.sh
+      - name: Validate Compose
+        env:
+          JWT_SECRET: ci-test-secret-at-least-thirty-two-characters
+          CREDENTIAL_ENCRYPTION_KEY: not-a-real-credential-key
+          DB_PASSWORD: ci-postgres-password
+          NOTAVIA_DATA_DIR: /tmp/notavia-ci
+        run: docker compose config --quiet
+      - run: docker build -f apps/server/Dockerfile apps/server
+      - run: docker build -f apps/web/Dockerfile .

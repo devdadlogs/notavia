@@ -23,6 +23,43 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
+random_secret() {
+    if command -v openssl >/dev/null 2>&1; then
+        openssl rand -base64 32 | tr -d '\n'
+    else
+        dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '\n'
+    fi
+}
+
+set_env_value() {
+    local key="$1" value="$2" temp
+    temp="$(mktemp "${TMPDIR:-/tmp}/notavia-env.XXXXXX")"
+    awk -v key="$key" -v value="$value" '
+        BEGIN { replaced = 0 }
+        $0 ~ "^[[:space:]]*" key "[[:space:]]*=" { print key "=" value; replaced = 1; next }
+        { print }
+        END { if (!replaced) print key "=" value }
+    ' .env > "$temp"
+    chmod 600 "$temp"
+    mv "$temp" .env
+}
+
+JWT_VALUE="$(read_env_value JWT_SECRET "$ROOT_DIR/.env")"
+if [ -z "$JWT_VALUE" ] || [ "$JWT_VALUE" = "replace-with-a-long-random-secret" ]; then
+    set_env_value JWT_SECRET "$(random_secret)"
+    echo "🔐 已为当前实例生成 JWT_SECRET。"
+fi
+ENCRYPTION_VALUE="$(read_env_value CREDENTIAL_ENCRYPTION_KEY "$ROOT_DIR/.env")"
+if [ -z "$ENCRYPTION_VALUE" ]; then
+    set_env_value CREDENTIAL_ENCRYPTION_KEY "$(random_secret)"
+    echo "🔐 已为云模型密钥生成独立加密密钥，请安全备份 .env。"
+fi
+DB_PASSWORD_VALUE="$(read_env_value DB_PASSWORD "$ROOT_DIR/.env")"
+if [ -z "$DB_PASSWORD_VALUE" ] || [ "$DB_PASSWORD_VALUE" = "postgres" ]; then
+    set_env_value DB_PASSWORD "$(random_secret)"
+    echo "🔐 已为可选 PostgreSQL 服务生成随机密码。"
+fi
+
 DATA_DIR="$(resolve_data_dir "$ROOT_DIR" "$ROOT_DIR/.env")"
 prepare_data_dir "$DATA_DIR"
 export NOTAVIA_DATA_DIR="$DATA_DIR"

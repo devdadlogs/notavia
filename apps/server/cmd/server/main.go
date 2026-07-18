@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -17,6 +18,9 @@ import (
 func main() {
 	// Load configuration
 	config.Load()
+	if err := config.Validate(); err != nil {
+		log.Fatal("Invalid configuration: ", err)
+	}
 
 	// Initialize database
 	config.InitDB()
@@ -26,6 +30,17 @@ func main() {
 
 	// Create Gin router
 	r := gin.Default()
+	if config.AppConfig.TrustedProxies == "" {
+		_ = r.SetTrustedProxies(nil)
+	} else {
+		proxies := strings.Split(config.AppConfig.TrustedProxies, ",")
+		for index := range proxies {
+			proxies[index] = strings.TrimSpace(proxies[index])
+		}
+		if err := r.SetTrustedProxies(proxies); err != nil {
+			log.Fatal("Invalid TRUSTED_PROXIES: ", err)
+		}
+	}
 
 	// CORS
 	r.Use(cors.New(cors.Config{
@@ -41,11 +56,8 @@ func main() {
 	// Health check
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
-			"status":    "ok",
-			"version":   "0.1.0",
-			"dbDriver":  config.AppConfig.DBDriver,
-			"ollamaUrl": config.AppConfig.OllamaURL,
-			"yjsStats":  yjsHub.GetStats(),
+			"status":  "ok",
+			"version": "0.1.0-alpha.1",
 		})
 	})
 
@@ -67,6 +79,7 @@ func main() {
 	// Auth (public)
 	auth := api.Group("/auth")
 	{
+		auth.GET("/registration-status", handlers.RegistrationStatus)
 		auth.POST("/register", handlers.Register)
 		auth.POST("/login", handlers.Login)
 		auth.POST("/logout", handlers.Logout)

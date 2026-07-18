@@ -94,7 +94,7 @@ migrate_legacy_volumes() {
     project="$(project_name "$root_dir")"
 
     for key in $LEGACY_VOLUME_KEYS; do
-        target="$(printf '%s\n' $LEGACY_TARGET_DIRS | sed -n "${index}p")"
+        target="$(printf '%s\n' "$LEGACY_TARGET_DIRS" | sed -n "${index}p")"
         volume="$(find_legacy_volume "$project" "$key")"
         if [ -n "$volume" ]; then
             found=1
@@ -114,7 +114,7 @@ migrate_legacy_volumes() {
     docker compose stop
     index=1
     for key in $LEGACY_VOLUME_KEYS; do
-        target="$(printf '%s\n' $LEGACY_TARGET_DIRS | sed -n "${index}p")"
+        target="$(printf '%s\n' "$LEGACY_TARGET_DIRS" | sed -n "${index}p")"
         volume="$(find_legacy_volume "$project" "$key")"
         if [ -n "$volume" ]; then
             echo "   $volume → $data_dir/$target"

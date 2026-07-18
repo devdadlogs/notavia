@@ -20,6 +20,11 @@ services:
       DB_PATH: /app/data/notavia.db
       UPLOAD_DIR: /app/data/uploads
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env before starting Notavia}
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?Set CREDENTIAL_ENCRYPTION_KEY in .env before starting Notavia}
+      APP_ENV: ${APP_ENV:-production}
+      REGISTRATION_MODE: ${REGISTRATION_MODE:-first-user}
+      COOKIE_SECURE: ${COOKIE_SECURE:-auto}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:8080}
       OLLAMA_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:1.5b}
@@ -50,10 +55,8 @@ services:
     profiles: ["postgres"] # Only starts with: docker compose --profile postgres up
     environment:
       POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env before starting PostgreSQL}
       POSTGRES_DB: ${DB_NAME:-notavia}
-    ports:
-      - "5432:5432"
     volumes:
       - type: bind
         source: ${NOTAVIA_DATA_DIR:-./.notavia-data}/postgres
@@ -65,8 +68,6 @@ services:
     image: redis:7-alpine
     container_name: notavia_redis
     command: redis-server --appendonly yes
-    ports:
-      - "6379:6379"
     volumes:
       - type: bind
         source: ${NOTAVIA_DATA_DIR:-./.notavia-data}/redis
@@ -75,10 +76,8 @@ services:
 
   # ── Ollama (Local AI Runtime) ─────────────────────────────
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.32.0
     container_name: notavia_ollama
-    ports:
-      - "11434:11434"
     volumes:
       - type: bind
         source: ${NOTAVIA_DATA_DIR:-./.notavia-data}/ollama
@@ -95,7 +94,7 @@ services:
 
   # Download the configured local model in the background on first startup.
   ollama-init:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.32.0
     container_name: notavia_ollama_init
     environment:
       OLLAMA_HOST: http://ollama:11434
@@ -110,10 +109,8 @@ services:
 
   # ── Qdrant (Vector Database for Semantic Search) ──────────
   qdrant:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant:v1.18.2
     container_name: notavia_qdrant
-    ports:
-      - "6333:6333"
     volumes:
       - type: bind
         source: ${NOTAVIA_DATA_DIR:-./.notavia-data}/qdrant
@@ -122,10 +119,8 @@ services:
 
   # ── Whisper (Local Audio Transcription) ───────────────────
   whisper:
-    image: hub.rat.dev/onerahmet/openai-whisper-asr-webservice:latest
+    image: onerahmet/openai-whisper-asr-webservice:v1.9.1
     container_name: notavia_whisper
-    ports:
-      - "9005:9000"
     environment:
       - ASR_MODEL=small # Options: tiny, base, small, medium, large
       - ASR_ENGINE=openai_whisper
@@ -133,4 +128,21 @@ services:
       - type: bind
         source: ${NOTAVIA_DATA_DIR:-./.notavia-data}/whisper
         target: /root/.cache/whisper
+    restart: unless-stopped
+
+  debug-ports:
+    image: busybox:1.37.0
+    profiles: ["debug"]
+    command: >-
+      sh -c "nc -lk -p 5432 -e nc postgres 5432 &
+      nc -lk -p 6379 -e nc redis 6379 &
+      nc -lk -p 11434 -e nc ollama 11434 &
+      nc -lk -p 6333 -e nc qdrant 6333 &
+      nc -lk -p 9005 -e nc whisper 9000 & wait"
+    ports:
+      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:11434:11434"
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:9005:9005"
     restart: unless-stopped

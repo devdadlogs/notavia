@@ -4,6 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=persistence.sh
+# shellcheck disable=SC1091
 source "$SCRIPT_DIR/persistence.sh"
 
 TMP_ROOT="$(mktemp -d)"

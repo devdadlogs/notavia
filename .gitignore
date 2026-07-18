@@ -44,4 +44,7 @@ yarn-error.log*
 **/tmp
 **/data/uploads
 **/apps/server/uploads/
+**/bin/
+*.har
+*.log
 .notavia-data/

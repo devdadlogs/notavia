@@ -1,0 +1,24 @@
+name: Bug report
+description: 报告可复现的问题
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    attributes:
+      label: 问题描述
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: 复现步骤
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Notavia 版本
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: 环境与日志
+      description: 请先删除 Cookie、Token、邮箱、素材正文和密钥。

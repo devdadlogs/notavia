@@ -1,5 +1,8 @@
 {
   "name": "notavia",
+  "version": "0.1.0-alpha.1",
+  "description": "Private AI workspace for traceable creator assets and multi-platform writing",
+  "license": "AGPL-3.0-only",
   "private": true,
   "scripts": {
     "build": "turbo run build",
@@ -15,13 +18,6 @@
   },
   "packageManager": "pnpm@9.0.0",
   "engines": {
-    "node": ">=18"
-  },
-  "pnpm": {
-    "overrides": {
-      "@tiptap/pm": "3.26.1",
-      "@tiptap/core": "3.26.1"
-    }
+    "node": ">=22"
   }
 }
-

@@ -2,10 +2,13 @@ package handlers
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -14,6 +17,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/notavia/server/internal/config"
+	"github.com/notavia/server/internal/credential"
 	"github.com/notavia/server/internal/middleware"
 	"github.com/notavia/server/internal/models"
 	"gorm.io/gorm"
@@ -25,9 +29,14 @@ const (
 	CurrentCloudConsentVersion = "2026-07-16"
 )
 
+var loginIPLimiter = middleware.NewRateLimiter(5, 5*time.Minute)
+var loginEmailLimiter = middleware.NewRateLimiter(5, 5*time.Minute)
+var registerIPLimiter = middleware.NewRateLimiter(5, time.Hour)
+var registrationMu sync.Mutex
+
 type RegisterInput struct {
 	Email          string `json:"email" binding:"required,email"`
-	Password       string `json:"password" binding:"required,min=6"`
+	Password       string `json:"password" binding:"required,min=12"`
 	Name           string `json:"name"`
 	Accepted       bool   `json:"accepted"`
 	TermsVersion   string `json:"termsVersion"`
@@ -40,13 +49,24 @@ type LoginInput struct {
 }
 
 func Register(c *gin.Context) {
+	if config.AppConfig.RegistrationMode == "first-user" {
+		registrationMu.Lock()
+		defer registrationMu.Unlock()
+	}
 	var input RegisterInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if !allowRateLimit(c, registerIPLimiter, c.ClientIP()) {
+		return
+	}
 	if !input.Accepted || input.TermsVersion != CurrentTermsVersion || input.PrivacyVersion != CurrentPrivacyVersion {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请阅读并同意当前版本的用户协议和隐私政策"})
+		return
+	}
+	if !registrationAllowed() {
+		c.JSON(http.StatusForbidden, gin.H{"error": "当前实例已关闭注册"})
 		return
 	}
 
@@ -78,10 +98,22 @@ func Register(c *gin.Context) {
 		if err := tx.Create(&user).Error; err != nil {
 			return err
 		}
+		if config.AppConfig.RegistrationMode == "first-user" {
+			if err := tx.Create(&models.InstanceOwner{ID: "owner", UserID: user.ID}).Error; err != nil {
+				return err
+			}
+		}
 		return tx.Create(&acceptance).Error
 	}); err != nil {
+		if config.AppConfig.RegistrationMode == "first-user" && !registrationAllowed() {
+			c.JSON(http.StatusForbidden, gin.H{"error": "当前实例已完成首位用户注册"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
 		return
+	}
+	if config.AppConfig.RegistrationMode == "open" {
+		config.DB.Exec("INSERT INTO instance_owners (id, user_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING", "owner", user.ID, now)
 	}
 
 	// Generate JWT
@@ -89,9 +121,32 @@ func Register(c *gin.Context) {
 	setTokenCookie(c, token)
 
 	c.JSON(http.StatusCreated, gin.H{
-		"user":  sanitizeUser(user),
-		"token": token,
+		"user": sanitizeUser(user),
 	})
+}
+
+func registrationAllowed() bool {
+	switch config.AppConfig.RegistrationMode {
+	case "open":
+		return true
+	case "closed":
+		return false
+	default:
+		var count int64
+		config.DB.Model(&models.InstanceOwner{}).Where("id = ?", "owner").Count(&count)
+		return count == 0
+	}
+}
+
+func RegistrationStatus(c *gin.Context) {
+	allowed := registrationAllowed()
+	reason := "open"
+	if !allowed {
+		reason = "closed"
+	} else if config.AppConfig.RegistrationMode == "first-user" {
+		reason = "first-user"
+	}
+	c.JSON(http.StatusOK, gin.H{"allowed": allowed, "reason": reason})
 }
 
 type onboardingInput struct {
@@ -156,6 +211,9 @@ func Login(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if !allowRateLimit(c, loginIPLimiter, c.ClientIP()) || !allowRateLimit(c, loginEmailLimiter, strings.ToLower(input.Email)) {
+		return
+	}
 
 	var user models.User
 	if err := config.DB.Where("email = ?", input.Email).First(&user).Error; err != nil {
@@ -172,13 +230,13 @@ func Login(c *gin.Context) {
 	setTokenCookie(c, token)
 
 	c.JSON(http.StatusOK, gin.H{
-		"user":  sanitizeUser(user),
-		"token": token,
+		"user": sanitizeUser(user),
 	})
 }
 
 func Logout(c *gin.Context) {
-	c.SetCookie("token", "", -1, "/", "", false, true)
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie("token", "", -1, "/", "", requestIsHTTPS(c), true)
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
 }
 
@@ -195,11 +253,12 @@ func GetMe(c *gin.Context) {
 }
 
 type UpdateLLMConfigInput struct {
-	LLMProvider    string `json:"llmProvider"`
-	OpenAIBaseURL  string `json:"openAiBaseUrl"`
-	OpenAIKey      string `json:"openAiKey"`
-	OpenAIModel    string `json:"openAiModel"`
-	CloudAIConsent bool   `json:"cloudAiConsent"`
+	LLMProvider    string  `json:"llmProvider"`
+	OpenAIBaseURL  string  `json:"openAiBaseUrl"`
+	OpenAIKey      *string `json:"openAiKey"`
+	ClearOpenAIKey bool    `json:"clearOpenAiKey"`
+	OpenAIModel    string  `json:"openAiModel"`
+	CloudAIConsent bool    `json:"cloudAiConsent"`
 }
 
 func UpdateLLMConfig(c *gin.Context) {
@@ -214,7 +273,22 @@ func UpdateLLMConfig(c *gin.Context) {
 		return
 	}
 
-	updates := map[string]any{"llm_provider": input.LLMProvider, "open_ai_base_url": input.OpenAIBaseURL, "open_ai_key": input.OpenAIKey, "open_ai_model": input.OpenAIModel}
+	updates := map[string]any{"llm_provider": input.LLMProvider, "open_ai_base_url": input.OpenAIBaseURL, "open_ai_model": input.OpenAIModel}
+	if input.ClearOpenAIKey {
+		updates["open_ai_key_ciphertext"], updates["open_ai_key"], updates["open_ai_key_hint"] = "", "", ""
+	} else if input.OpenAIKey != nil && strings.TrimSpace(*input.OpenAIKey) != "" {
+		cipher, err := credential.NewCipher(config.AppConfig.CredentialEncryptionKey)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "云模型密钥加密尚未配置"})
+			return
+		}
+		encrypted, err := cipher.Encrypt(strings.TrimSpace(*input.OpenAIKey))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "加密云模型密钥失败"})
+			return
+		}
+		updates["open_ai_key_ciphertext"], updates["open_ai_key"], updates["open_ai_key_hint"] = encrypted, "", keyHint(*input.OpenAIKey)
+	}
 	if input.LLMProvider == "openai" {
 		now := time.Now()
 		updates["cloud_ai_consent_at"], updates["cloud_ai_consent_version"] = now, CurrentCloudConsentVersion
@@ -255,6 +329,8 @@ func DeleteAccount(c *gin.Context) {
 	config.DB.Model(&models.UploadedFile{}).Where("user_id = ?", userID).Pluck("filename", &removable)
 	var audioURLs []string
 	config.DB.Model(&models.Note{}).Where("user_id = ? AND audio_url <> ''", userID).Pluck("audio_url", &audioURLs)
+	var ownerCount int64
+	config.DB.Model(&models.InstanceOwner{}).Where("id = ? AND user_id = ?", "owner", userID).Count(&ownerCount)
 	err := config.DB.Transaction(func(tx *gorm.DB) error {
 		var workIDs, topicIDs, noteIDs []string
 		tx.Model(&models.Work{}).Where("user_id = ?", userID).Pluck("id", &workIDs)
@@ -281,7 +357,17 @@ func DeleteAccount(c *gin.Context) {
 		tx.Where("user_id = ?", userID).Delete(&models.UploadedFile{})
 		tx.Where("user_id = ?", userID).Delete(&models.AiUsageLog{})
 		tx.Where("user_id = ?", userID).Delete(&models.LegalAcceptance{})
-		return tx.Delete(&user).Error
+		tx.Where("user_id = ?", userID).Delete(&models.InstanceOwner{})
+		if err := tx.Delete(&user).Error; err != nil {
+			return err
+		}
+		if ownerCount == 1 {
+			var successor models.User
+			if err := tx.Order("created_at ASC").First(&successor).Error; err == nil {
+				return tx.Create(&models.InstanceOwner{ID: "owner", UserID: successor.ID}).Error
+			}
+		}
+		return nil
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "注销账号失败"})
@@ -292,7 +378,8 @@ func DeleteAccount(c *gin.Context) {
 		_ = os.Remove(filepath.Join(config.AppConfig.UploadDir, "audio", filepath.Base(audioURL)))
 	}
 	_ = getQdrantService().DeleteAllNotesByUserID(userID)
-	c.SetCookie("token", "", -1, "/", "", false, true)
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie("token", "", -1, "/", "", requestIsHTTPS(c), true)
 	c.Status(http.StatusNoContent)
 }
 
@@ -313,10 +400,50 @@ func generateToken(user models.User) string {
 
 func setTokenCookie(c *gin.Context, token string) {
 	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie("token", token, 7*24*3600, "/", "", false, true)
+	c.SetCookie("token", token, 7*24*3600, "/", "", requestIsHTTPS(c), true)
+}
+
+func allowRateLimit(c *gin.Context, limiter *middleware.RateLimiter, key string) bool {
+	allowed, retry := limiter.Allow(key)
+	if allowed {
+		return true
+	}
+	seconds := int(retry.Seconds()) + 1
+	c.Header("Retry-After", strconv.Itoa(seconds))
+	c.JSON(http.StatusTooManyRequests, gin.H{"error": "尝试次数过多，请稍后重试"})
+	return false
+}
+
+func requestIsHTTPS(c *gin.Context) bool {
+	if config.AppConfig.CookieSecure == "true" || c.Request.TLS != nil {
+		return true
+	}
+	if config.AppConfig.CookieSecure != "auto" || !strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https") {
+		return false
+	}
+	host, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+	if err != nil {
+		host = c.Request.RemoteAddr
+	}
+	ip := net.ParseIP(host)
+	for _, raw := range strings.Split(config.AppConfig.TrustedProxies, ",") {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		if proxyIP := net.ParseIP(raw); proxyIP != nil && proxyIP.Equal(ip) {
+			return true
+		}
+		if _, network, err := net.ParseCIDR(raw); err == nil && network.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 func sanitizeUser(user models.User) gin.H {
+	var ownerCount int64
+	config.DB.Model(&models.InstanceOwner{}).Where("id = ? AND user_id = ?", "owner", user.ID).Count(&ownerCount)
 	return gin.H{
 		"id":                    user.ID,
 		"email":                 user.Email,
@@ -324,9 +451,11 @@ func sanitizeUser(user models.User) gin.H {
 		"avatarUrl":             user.AvatarURL,
 		"plan":                  user.Plan,
 		"createdAt":             user.CreatedAt,
+		"isAdmin":               ownerCount == 1,
 		"llmProvider":           user.LLMProvider,
 		"openAiBaseUrl":         user.OpenAIBaseURL,
-		"openAiKey":             user.OpenAIKey,
+		"openAiKeyConfigured":   user.OpenAIKeyCiphertext != "" || user.OpenAIKey != "",
+		"openAiKeyHint":         credentialHint(user),
 		"openAiModel":           user.OpenAIModel,
 		"termsVersion":          user.TermsVersion,
 		"privacyVersion":        user.PrivacyVersion,
@@ -335,4 +464,19 @@ func sanitizeUser(user models.User) gin.H {
 		"cloudAiConsentVersion": user.CloudAIConsentVersion,
 		"cloudAiConsentAt":      user.CloudAIConsentAt,
 	}
+}
+
+func credentialHint(user models.User) string {
+	if user.OpenAIKeyCiphertext == "" && user.OpenAIKey == "" {
+		return ""
+	}
+	return "••••" + user.OpenAIKeyHint
+}
+
+func keyHint(key string) string {
+	key = strings.TrimSpace(key)
+	if len(key) <= 4 {
+		return ""
+	}
+	return key[len(key)-4:]
 }

@@ -1,123 +1,101 @@
 # Notavia Creator
 
-Notavia 是面向长期观点输出者的私有 AI 内容工作台。它把网页、语音、旧文章和随手记沉淀为可追溯素材，再帮助你完成选题、知乎长文、小红书图文、短视频口播稿和发布复盘。
+> 把私人素材沉淀为可追溯的内容资产，再把一个观点转成多个平台作品。
 
-核心原则：数据归用户，AI 引用能回到原文，没有私人来源的内容必须标记为模型补充。
+Notavia 是面向长期输出者的私有 AI 创作工作台。它支持本地部署、自选模型、网页与多媒体素材导入、带引用写作、个人风格检查和多平台版本管理。
 
-## 当前能力
+**项目状态：`0.1.0 Alpha`。** 已适合个人自托管试用，暂不承诺集群、高可用、邮件找回、MFA 或企业权限能力。
 
-- 私有素材库：富文本、网页剪藏、Markdown 导入、语音转写、图片/音频/视频；网页图片会下载到本地，并保留正文结构与来源链接。
-- 创作选题：核心问题、目标读者、明确结论、预期行动和状态流转。
-- 混合检索：关键词与 Qdrant 语义检索合并，并允许人工固定素材。
-- 带引用写作：生成知乎草稿，引用可回到原始素材，额外事实标记待核实。
-- 七九风格检查：检查模糊观点、重复、套话、禁用表达、虚构经历和无来源事实。
-- 多平台版本：知乎主稿转换为小红书图文和通用短视频口播稿。
-- 发布记录：手工登记平台、链接和表现数据。
-- 完整导出：Markdown 素材和包含选题、作品、引用、风格、修改、发布记录的 JSON 快照。
-- 本地 Ollama 或任意 OpenAI 兼容模型。
+![Notavia Creator](apps/web/src/assets/hero.png)
 
-## Docker 一键启动
+## 核心能力
 
-要求：Docker Desktop 或 Docker Engine + Compose，建议至少 8GB 内存。
+- 保存富文本、网页、Markdown、图片、音频、视频和语音转写，并保留原始来源。
+- 从素材提炼观点、案例、经历、事实和待核实信息。
+- 按选题混合检索并固定素材，生成可跳回原文的引用草稿。
+- 使用可编辑的个人档案检查观点、套话、虚构经历和无来源事实。
+- 将主稿转换为小红书图文和短视频口播稿，记录发布与反馈。
+- 使用 Ollama 本地模型或 OpenAI 兼容服务；云模型密钥在服务器端加密保存。
+
+```mermaid
+flowchart LR
+  A[素材导入] --> B[AI 提炼]
+  B --> C[创建选题]
+  C --> D[带引用主稿]
+  D --> E[个人风格检查]
+  E --> F[多平台版本]
+  F --> G[发布记录]
+```
+
+## 快速启动
+
+要求 Docker Desktop 或 Docker Engine + Compose。建议至少 8GB 内存，首次下载模型需要数 GB 磁盘空间。
 
 ```bash
 cp .env.example .env
 ./start.sh
 ```
 
-打开 <http://localhost:8080>。首次启动会在后台下载 `.env` 中配置的 Ollama 模型。
+打开 <http://localhost:8080>。脚本会生成 JWT、云模型凭据加密密钥和可选 PostgreSQL 密码，并把数据保存到 `$HOME/.notavia/data`。
 
-公开部署前务必修改 `.env` 中的 `JWT_SECRET`，并通过 HTTPS 反向代理访问。
-
-### 数据持久化
-
-`start.sh` 默认把所有数据保存在宿主机的 `$HOME/.notavia/data`，删除容器、执行
-`docker compose down` 或 `docker compose down -v` 都不会删除这个目录。也可以在 `.env`
-中指定其他位置，建议使用绝对路径：
+空数据库允许注册首位实例管理员；创建成功后注册默认关闭。需要调整时修改：
 
 ```env
-NOTAVIA_DATA_DIR=/Volumes/MyDisk/NotaviaData
+REGISTRATION_MODE=first-user # first-user | open | closed
 ```
 
-目录包含应用数据库与上传文件、Qdrant 索引、Ollama 模型、Whisper 缓存及可选的
-PostgreSQL、Redis 数据。外置磁盘需要先挂载，并允许 Docker Desktop 访问该目录。
+## 安全自托管
 
-如果旧版本已经使用 Docker 命名卷，首次启动新版前执行：
+- 默认只发布 Web 端口，Redis、Ollama、Qdrant、Whisper 和 PostgreSQL 仅能通过 Docker 内部网络访问。
+- 公网部署必须使用 HTTPS，并把 `CORS_ORIGIN` 设置为真实访问地址。
+- 反向代理与服务端直接连接时，在 `TRUSTED_PROXIES` 中填写代理 IP 或 CIDR；也可以显式设置 `COOKIE_SECURE=true`。
+- `.env` 包含解密云模型密钥所需的主密钥，必须单独安全备份，不能提交到 Git。
+- 如需本机调试内部端口，显式运行 `docker compose --profile debug up -d`；端口只绑定 `127.0.0.1`。
 
-```bash
-./start.sh --migrate-volumes
-```
+漏洞报告方式见 [SECURITY.md](SECURITY.md)。
 
-脚本会停止服务，把旧卷只读复制到新的宿主机目录，保留旧卷用于回退，然后启动新版。
-目标目录非空时迁移会拒绝执行，避免覆盖已有数据。
+## 数据、备份与迁移
 
-### 备份与恢复
-
-应用侧可在左下角点击“完整导出”。服务器级完整备份使用：
+通过 `NOTAVIA_DATA_DIR=/绝对路径` 可修改宿主机数据目录。删除容器或执行 `docker compose down -v` 不会删除该目录。
 
 ```bash
 ./start.sh --backup
+./start.sh --restore /path/to/notavia-backup.tar.gz
+./start.sh --migrate-volumes  # 从旧版 Docker 命名卷迁移
 ```
 
-备份文件和 SHA-256 校验文件保存在 `${NOTAVIA_DATA_DIR}/backups`。恢复时执行：
-
-```bash
-./start.sh --restore /完整路径/notavia-20260718-120000.tar.gz
-```
-
-恢复需要输入 `RESTORE` 确认。脚本会先自动创建 `pre-restore` 备份，再替换当前数据。
+恢复前会自动生成 `pre-restore` 备份；备份和 `.sha256` 文件位于 `${NOTAVIA_DATA_DIR}/backups`。
 
 ## 本地开发
 
-### 一键启动完整服务
-
-首次启动前准备环境变量，然后运行统一启动脚本：
+要求 Node.js 22、pnpm 9 和 Go 1.26。
 
 ```bash
-cp .env.example .env
-./start.sh
+pnpm install --frozen-lockfile
+pnpm --filter web dev
+
+cd apps/server
+PORT=3001 JWT_SECRET=development-secret-at-least-32-characters go run ./cmd/server
 ```
 
-脚本会检查宿主机数据目录、写入权限和磁盘空间，再构建并启动 Docker Compose 中的
-全部服务。Web 入口：<http://localhost:8080>。
+提交前运行：
 
 ```bash
-docker compose ps       # 查看服务状态
-docker compose logs -f  # 查看全部日志
-docker compose down     # 停止全部服务
+pnpm --filter web lint
+pnpm --filter web build
+cd apps/server && go test ./... && go vet ./...
+bash scripts/persistence_test.sh
+docker compose config --quiet
 ```
 
-### 单独启动前后端开发服务
+## 路线图与边界
 
-要求：Node.js 22、pnpm 9+、Go 1.26。
+近期重点是完成真实创作闭环、提升素材复用率、完善引用可信度和 30 天自用验证。Alpha 阶段不做团队实时协作、自动发布、平台数据抓取、模型微调、视频剪辑、SaaS 计费或移动原生 App。
 
-```bash
-pnpm install
-./start-backend.sh
-./start-frontend.sh
-```
+项目最初来自创作者“七九”的真实工作流；公开版本使用通用个人风格档案，七九配置仅作为 [`examples/style-profiles/qijiu.json`](examples/style-profiles/qijiu.json) 示例，新用户默认从空白引导开始。
 
-前端：<http://localhost:5173>，后端：<http://localhost:3001>。
+## 参与贡献与许可证
 
-## 环境变量
+贡献方式见 [CONTRIBUTING.md](CONTRIBUTING.md)，版本变化见 [CHANGELOG.md](CHANGELOG.md)，第三方声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
-- `JWT_SECRET`：登录令牌签名密钥，公开部署必须修改。
-- `WEB_PORT`：Web 端口，默认 `8080`。
-- `CORS_ORIGIN`：允许的前端来源。
-- `NOTAVIA_DATA_DIR`：宿主机数据目录；留空时 `start.sh` 使用 `$HOME/.notavia/data`。
-- `OLLAMA_MODEL`：首次启动自动准备的本地模型，默认 `qwen2.5:1.5b`。
-- `OLLAMA_URL`、`QDRANT_URL`、`WHISPER_BASE_URL`：AI 基础服务地址。
-- `OPENAI_BASE_URL`、`OPENAI_API_KEY`、`OPENAI_MODEL`：可选云模型配置，也可在应用设置中按用户维护。
-
-## 验证
-
-```bash
-cd apps/server && GOCACHE=/tmp/notavia-go-cache go test ./...
-PATH="$HOME/.nvm/versions/node/v22.21.0/bin:$PATH" pnpm --filter web lint
-PATH="$HOME/.nvm/versions/node/v22.21.0/bin:$PATH" pnpm --filter web build
-docker compose config
-```
-
-## MVP 边界
-
-Notavia 当前不做团队协作扩张、自动发布、平台数据抓取、AI 追热点、模型微调、图片/视频生成、SaaS 计费或移动原生 App。先连续自用 30 天，用真实作品验证是否节省时间。
+Notavia 按 [GNU Affero General Public License v3.0](LICENSE) 发布。通过网络向用户提供修改版服务时，也必须按许可证提供对应源码。

@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/notavia/server/internal/config"
+	"github.com/notavia/server/internal/credential"
 	"github.com/notavia/server/internal/middleware"
 	"github.com/notavia/server/internal/models"
 	"github.com/notavia/server/internal/services"
@@ -58,7 +59,12 @@ func getLLMProvider(userID string) services.LLMProvider {
 		if baseURL == "" {
 			baseURL = config.AppConfig.OpenAIBaseURL
 		}
-		apiKey := user.OpenAIKey
+		apiKey := ""
+		if user.OpenAIKeyCiphertext != "" {
+			if cipher, err := credential.NewCipher(config.AppConfig.CredentialEncryptionKey); err == nil {
+				apiKey, _ = cipher.Decrypt(user.OpenAIKeyCiphertext)
+			}
+		}
 		if apiKey == "" {
 			apiKey = config.AppConfig.OpenAIKey
 		}

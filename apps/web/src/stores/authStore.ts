@@ -6,9 +6,11 @@ interface User {
   email: string;
   name?: string;
   avatarUrl?: string;
+  isAdmin?: boolean;
   llmProvider?: string;
   openAiBaseUrl?: string;
-  openAiKey?: string;
+  openAiKeyConfigured?: boolean;
+  openAiKeyHint?: string;
   openAiModel?: string;
   termsVersion?: string;
   privacyVersion?: string;

@@ -27,7 +27,7 @@ jobs:
           scan-ref: .
           severity: CRITICAL,HIGH
           exit-code: "1"
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: apps/server/go.mod
           cache-dependency-path: apps/server/go.sum

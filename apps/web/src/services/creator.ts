@@ -56,6 +56,12 @@ export interface Publication {
   views: number; likes: number; favorites: number; comments: number; notes: string;
 }
 
+export interface StyleIssue {
+  type: 'clarity' | 'repetition' | 'cliche' | 'banned_phrase' | 'invented_experience' | 'anxiety' | 'unsourced_fact' | 'tone';
+  severity: 'high' | 'medium' | 'low'; quote?: string; message: string;
+  suggestion?: string; replacement?: string;
+}
+
 export const creatorService = {
   listTopics: async () => (await api.get<Topic[]>('/topics')).data,
   getTopic: async (id: string) => (await api.get<Topic>(`/topics/${id}`)).data,
@@ -75,7 +81,7 @@ export const creatorService = {
   getInsightStatus: async (noteId: string) => (await api.get<MaterialInsightStatus>(`/creator-ai/insights/${noteId}/status`)).data,
   suggestTopicBrief: async (topicId: string) => (await api.post<TopicBriefSuggestion>('/creator-ai/topic-brief', { topicId })).data,
   generateDraft: async (topicId: string, materialIds: string[]) => (await api.post('/creator-ai/draft', { topicId, materialIds })).data,
-  reviewStyle: async (workId: string) => (await api.post('/creator-ai/style-review', { workId })).data,
+  reviewStyle: async (workId: string) => (await api.post<{ issues: StyleIssue[] }>('/creator-ai/style-review', { workId })).data,
   transform: async (workId: string, platform: Platform) => (await api.post('/creator-ai/transform', { workId, platform })).data,
   updateWork: async (id: string, payload: Partial<Work> & Record<string, unknown>) => (await api.put<Work>(`/works/${id}`, payload)).data,
   createPublication: async (payload: Partial<Publication>) => (await api.post<Publication>('/publications', payload)).data,

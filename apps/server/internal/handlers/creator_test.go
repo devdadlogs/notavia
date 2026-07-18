@@ -245,6 +245,47 @@ func TestTopicAPIKeepsUsersIsolated(t *testing.T) {
 	}
 }
 
+func TestConfirmedPreferenceIsSavedWithoutContentChange(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupCreatorTestDB(t)
+	work := models.Work{ID: "preference-work", UserID: "writer", TopicID: "topic", Platform: "zhihu", Title: "标题", Content: "正文", Status: "draft"}
+	config.DB.Create(&work)
+
+	w := creatorRequest(http.MethodPut, "/works/"+work.ID, work.UserID, map[string]any{
+		"preference":          "开头直接说结论",
+		"preferenceConfirmed": true,
+	}, UpdateWork)
+	if w.Code != http.StatusOK {
+		t.Fatalf("save preference: %d %s", w.Code, w.Body.String())
+	}
+	var profile models.StyleProfile
+	if err := config.DB.Where("user_id = ?", work.UserID).First(&profile).Error; err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(profile.RulesJSON, "开头直接说结论") {
+		t.Fatalf("confirmed preference was not saved: %s", profile.RulesJSON)
+	}
+	var revision models.Revision
+	if err := config.DB.Where("work_id = ?", work.ID).First(&revision).Error; err != nil {
+		t.Fatal("confirmed preference should create an auditable revision")
+	}
+}
+
+func TestTransformRejectsDerivedWorkAsSource(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupCreatorTestDB(t)
+	work := models.Work{ID: "derived-work", UserID: "writer", TopicID: "topic", Platform: "xiaohongshu", Title: "标题", Content: "正文", Status: "draft"}
+	config.DB.Create(&work)
+
+	w := creatorRequest(http.MethodPost, "/creator-ai/transform", work.UserID, map[string]string{
+		"workId":   work.ID,
+		"platform": "short_video",
+	}, TransformCreatorWork)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("derived work must not be transformed again, got %d %s", w.Code, w.Body.String())
+	}
+}
+
 type topicSuggestionProvider struct{}
 
 func (p *topicSuggestionProvider) CheckHealth() (bool, error)      { return true, nil }

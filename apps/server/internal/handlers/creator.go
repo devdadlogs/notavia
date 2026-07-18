@@ -361,14 +361,18 @@ func UpdateWork(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "invalid work status"})
 		return
 	}
+	confirmedPreference := input.PreferenceConfirmed && strings.TrimSpace(input.Preference) != ""
+	var profile models.StyleProfile
+	if confirmedPreference {
+		profile = loadStyleProfile(userID)
+	}
 	err := config.DB.Transaction(func(tx *gorm.DB) error {
-		if content != w.Content {
+		if content != w.Content || confirmedPreference {
 			rev := models.Revision{ID: uuid.NewString(), WorkID: w.ID, UserID: userID, PreviousContent: w.Content, Content: content, Summary: input.RevisionSummary, Preference: input.Preference, PreferenceConfirmed: input.PreferenceConfirmed}
 			if err := tx.Create(&rev).Error; err != nil {
 				return err
 			}
-			if input.PreferenceConfirmed && strings.TrimSpace(input.Preference) != "" {
-				profile := loadStyleProfile(userID)
+			if confirmedPreference {
 				var rules []string
 				_ = json.Unmarshal([]byte(profile.RulesJSON), &rules)
 				rules = append(rules, strings.TrimSpace(input.Preference))

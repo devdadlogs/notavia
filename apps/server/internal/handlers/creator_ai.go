@@ -435,7 +435,7 @@ func ReviewCreatorStyle(c *gin.Context) {
 		return
 	}
 	profile := loadStyleProfile(userID)
-	prompt := fmt.Sprintf(`检查下文，不改正文。返回严格 JSON：{"issues":[{"type":"clarity|repetition|cliche|banned_phrase|invented_experience|anxiety|unsourced_fact|tone","severity":"high|medium|low","quote":"原文片段","message":"口语化说明","suggestion":"建议"}]}。
+	prompt := fmt.Sprintf(`检查下文，不改正文。返回严格 JSON：{"issues":[{"type":"clarity|repetition|cliche|banned_phrase|invented_experience|anxiety|unsourced_fact|tone","severity":"high|medium|low","quote":"必须原样复制的原文片段","message":"口语化说明","suggestion":"修改理由","replacement":"可以直接替换原文片段的新文本，无法直接替换时留空"}]}。
 重点检查：观点不明确、车轱辘话、空话套话、禁用表达、编造作者经历、夸大贩焦虑、无来源事实、语言不口语。
 作者资料：%s
 规则：%s
@@ -446,11 +446,47 @@ func ReviewCreatorStyle(c *gin.Context) {
 		c.JSON(503, gin.H{"error": err.Error()})
 		return
 	}
-	var output map[string]any
+	var output struct {
+		Issues []struct {
+			Type        string `json:"type"`
+			Severity    string `json:"severity"`
+			Quote       string `json:"quote"`
+			Message     string `json:"message"`
+			Suggestion  string `json:"suggestion"`
+			Replacement string `json:"replacement"`
+		} `json:"issues"`
+	}
 	if err := parseModelJSON(raw, &output); err != nil {
 		c.JSON(422, gin.H{"error": "AI 返回格式无法解析", "raw": raw})
 		return
 	}
+	validTypes := map[string]bool{"clarity": true, "repetition": true, "cliche": true, "banned_phrase": true, "invented_experience": true, "anxiety": true, "unsourced_fact": true, "tone": true}
+	validSeverities := map[string]bool{"high": true, "medium": true, "low": true}
+	cleaned := output.Issues[:0]
+	for _, issue := range output.Issues {
+		if len(cleaned) >= 20 {
+			break
+		}
+		issue.Message = strings.TrimSpace(truncateRunes(issue.Message, 300))
+		if issue.Message == "" {
+			continue
+		}
+		if !validTypes[issue.Type] {
+			issue.Type = "clarity"
+		}
+		if !validSeverities[issue.Severity] {
+			issue.Severity = "medium"
+		}
+		issue.Quote = strings.TrimSpace(truncateRunes(issue.Quote, 500))
+		if issue.Quote != "" && !strings.Contains(work.Content, issue.Quote) {
+			issue.Quote = ""
+			issue.Replacement = ""
+		}
+		issue.Suggestion = strings.TrimSpace(truncateRunes(issue.Suggestion, 500))
+		issue.Replacement = strings.TrimSpace(truncateRunes(issue.Replacement, 800))
+		cleaned = append(cleaned, issue)
+	}
+	output.Issues = cleaned
 	c.JSON(200, output)
 }
 
@@ -467,6 +503,10 @@ func TransformCreatorWork(c *gin.Context) {
 	var source models.Work
 	if err := config.DB.Where("id = ? AND user_id = ?", input.WorkID, userID).Preload("Citations").First(&source).Error; err != nil {
 		c.JSON(404, gin.H{"error": "work not found"})
+		return
+	}
+	if source.Platform != "zhihu" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "只能从知乎主版本生成平台版本"})
 		return
 	}
 	format := "小红书图文，包含3个标题候选、开头钩子、短段落正文、结尾互动和配图建议"

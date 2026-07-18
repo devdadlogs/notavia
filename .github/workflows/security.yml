@@ -30,9 +30,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: apps/server/go.mod
+          cache-dependency-path: apps/server/go.sum
       - name: Go license policy
         working-directory: apps/server
-        run: go run github.com/google/go-licenses@v1.6.0 check ./...
+        run: go run github.com/google/go-licenses@v1.6.0 check --ignore github.com/notavia/server ./...
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:

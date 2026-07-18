@@ -41,6 +41,8 @@ Commit subjects must start with one of these prefixes: `Feat` for new functional
 
 Pull requests should explain the outcome, list verification commands, identify configuration or migration changes, and link the issue. Include screenshots for UI changes and request/response examples for APIs. Do not commit `.env`, credentials, databases, uploads, or build output.
 
+Dependency upgrades must be reviewed and submitted manually. Do not enable Dependabot version-update pull requests or any automation that pushes dependency branches to GitHub. Security alerts may remain enabled, but automated security-update pull requests require explicit maintainer approval before they are enabled.
+
 ## Security & Configuration Tips
 
 Keep all resources scoped to the authenticated user. Treat imported HTML, remote URLs, filenames, and model output as untrusted. Preserve source attribution, reject private-network URL fetching, and avoid exposing uploaded assets without ownership checks.

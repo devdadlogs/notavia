@@ -6,7 +6,8 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
 export JWT_SECRET="ci-test-secret-at-least-thirty-two-characters"
-export CREDENTIAL_ENCRYPTION_KEY="$(openssl rand -base64 32 | tr -d '\n')"
+CREDENTIAL_ENCRYPTION_KEY="$(openssl rand -base64 32 | tr -d '\n')"
+export CREDENTIAL_ENCRYPTION_KEY
 export DB_PASSWORD="ci-postgres-password"
 export NOTAVIA_DATA_DIR="${TMPDIR:-/tmp}/notavia-compose-security"
 

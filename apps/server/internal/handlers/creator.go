@@ -98,7 +98,7 @@ func ListTopics(c *gin.Context) {
 	if status := c.Query("status"); status != "" {
 		q = q.Where("status = ?", status)
 	}
-	if err := q.Preload("Materials.Note").Preload("Works").Order("updated_at DESC").Find(&topics).Error; err != nil {
+	if err := q.Preload("Materials.Note").Preload("Ideas.Idea").Preload("Works").Order("updated_at DESC").Find(&topics).Error; err != nil {
 		c.JSON(500, gin.H{"error": "failed to list topics"})
 		return
 	}
@@ -107,7 +107,7 @@ func ListTopics(c *gin.Context) {
 
 func GetTopic(c *gin.Context) {
 	var t models.Topic
-	if err := config.DB.Where("id = ? AND user_id = ?", c.Param("id"), middleware.GetUserID(c)).Preload("Materials.Note").Preload("Works.Citations").Preload("Works.Publications").First(&t).Error; err != nil {
+	if err := config.DB.Where("id = ? AND user_id = ?", c.Param("id"), middleware.GetUserID(c)).Preload("Materials.Note").Preload("Ideas.Idea").Preload("Works.Citations").Preload("Works.Publications").First(&t).Error; err != nil {
 		c.JSON(404, gin.H{"error": "topic not found"})
 		return
 	}
@@ -190,14 +190,90 @@ func AddTopicMaterial(c *gin.Context) {
 
 func RemoveTopicMaterial(c *gin.Context) {
 	userID := middleware.GetUserID(c)
+	topicID, noteID := c.Param("id"), c.Param("noteId")
 	var count int64
-	config.DB.Model(&models.Topic{}).Where("id = ? AND user_id = ?", c.Param("id"), userID).Count(&count)
+	config.DB.Model(&models.Topic{}).Where("id = ? AND user_id = ?", topicID, userID).Count(&count)
 	if count == 0 {
 		c.JSON(404, gin.H{"error": "topic not found"})
 		return
 	}
-	config.DB.Where("topic_id = ? AND note_id = ?", c.Param("id"), c.Param("noteId")).Delete(&models.TopicMaterial{})
+	if err := config.DB.Transaction(func(tx *gorm.DB) error {
+		var ideaIDs []string
+		if err := tx.Model(&models.MaterialIdea{}).Where("note_id = ? AND user_id = ?", noteID, userID).Pluck("id", &ideaIDs).Error; err != nil {
+			return err
+		}
+		if len(ideaIDs) > 0 {
+			if err := tx.Where("topic_id = ? AND idea_id IN ?", topicID, ideaIDs).Delete(&models.TopicIdea{}).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Where("topic_id = ? AND note_id = ?", topicID, noteID).Delete(&models.TopicMaterial{}).Error
+	}); err != nil {
+		c.JSON(500, gin.H{"error": "failed to remove material"})
+		return
+	}
 	c.Status(204)
+	c.Writer.WriteHeaderNow()
+}
+
+func AddTopicIdea(c *gin.Context) {
+	userID, topicID := middleware.GetUserID(c), c.Param("id")
+	var input struct {
+		IdeaID string `json:"ideaId" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+	var topic models.Topic
+	if err := config.DB.Where("id = ? AND user_id = ?", topicID, userID).First(&topic).Error; err != nil {
+		c.JSON(404, gin.H{"error": "topic not found"})
+		return
+	}
+	var idea models.MaterialIdea
+	if err := config.DB.Where("id = ? AND user_id = ?", input.IdeaID, userID).First(&idea).Error; err != nil {
+		c.JSON(404, gin.H{"error": "idea not found"})
+		return
+	}
+	if !ownedMaterialExists(userID, idea.NoteID) {
+		c.JSON(404, gin.H{"error": "material not found"})
+		return
+	}
+	ideaLink := models.TopicIdea{TopicID: topicID, IdeaID: idea.ID}
+	materialLink := models.TopicMaterial{TopicID: topicID, NoteID: idea.NoteID}
+	if err := config.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.FirstOrCreate(&materialLink).Error; err != nil {
+			return err
+		}
+		if err := tx.FirstOrCreate(&ideaLink).Error; err != nil {
+			return err
+		}
+		return tx.Model(&models.Note{}).Where("id = ? AND user_id = ?", idea.NoteID, userID).Update("material_status", "used").Error
+	}); err != nil {
+		c.JSON(500, gin.H{"error": "failed to add idea"})
+		return
+	}
+	if err := config.DB.Preload("Idea").First(&ideaLink, "topic_id = ? AND idea_id = ?", topicID, idea.ID).Error; err != nil {
+		c.JSON(500, gin.H{"error": "failed to load added idea"})
+		return
+	}
+	c.JSON(200, ideaLink)
+}
+
+func RemoveTopicIdea(c *gin.Context) {
+	userID, topicID, ideaID := middleware.GetUserID(c), c.Param("id"), c.Param("ideaId")
+	var count int64
+	config.DB.Model(&models.Topic{}).Where("id = ? AND user_id = ?", topicID, userID).Count(&count)
+	if count == 0 {
+		c.JSON(404, gin.H{"error": "topic not found"})
+		return
+	}
+	if err := config.DB.Where("topic_id = ? AND idea_id = ?", topicID, ideaID).Delete(&models.TopicIdea{}).Error; err != nil {
+		c.JSON(500, gin.H{"error": "failed to remove idea"})
+		return
+	}
+	c.Status(204)
+	c.Writer.WriteHeaderNow()
 }
 
 type workInput struct {

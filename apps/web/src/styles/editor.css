@@ -257,13 +257,33 @@ ul[data-type="taskList"] li > div {
 .material-panel-section textarea:focus { border-color: #aaa3ff; box-shadow: 0 0 0 3px rgb(101 89 232 / 8%); }
 .material-capture-selection { display: inline-flex; align-items: center; gap: 6px; margin: -4px 0 10px; padding: 7px 10px; border: 1px solid #dedbf9; border-radius: 8px; background: #f7f6ff; color: #6559e8; font: 600 12px/1 inherit; cursor: pointer; }
 .material-capture-selection:hover { border-color: #aaa3ff; background: #f0efff; }
-.material-save-note { margin-top: 9px; padding: 0; border: 0; background: transparent; color: #6559e8; font: 650 12px/1 inherit; cursor: pointer; }
+.material-note-save-row { display: flex; align-items: center; gap: 10px; min-height: 27px; margin-top: 8px; }
+.material-note-save-row > span { color: #b54747; font-size: 11px; }
+.material-save-note { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 76px; min-height: 27px; padding: 0 9px; border: 0; border-radius: 7px; background: #6559e8; color: #fff; font: 650 12px/1 inherit; cursor: pointer; }
+.material-save-note:disabled { opacity: .55; cursor: default; }
+.material-idea-cancel { border: 0; background: transparent; color: var(--text-secondary); font-size: 12px; cursor: pointer; }
+.material-idea-excerpt-draft { display: grid; grid-template-columns: 15px 1fr auto; gap: 7px; margin-bottom: 9px; padding: 9px 10px; border-radius: 8px; background: #f3f2ff; color: #5d6472; font-size: 11px; line-height: 1.55; }
+.material-idea-excerpt-draft svg { margin-top: 2px; color: #766ce0; }
+.material-idea-excerpt-draft button { align-self: start; padding: 0; border: 0; background: transparent; color: #766ce0; cursor: pointer; }
+.material-idea-list { display: grid; gap: 9px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #ececf2; }
+.material-idea-card { padding: 11px; border: 1px solid #e6e5ef; border-radius: 10px; background: #fcfcff; }
+.material-idea-card blockquote { margin: 0 0 8px; padding-left: 9px; border-left: 2px solid #c9c4fb; color: #777d8b; font-size: 11px; line-height: 1.55; }
+.material-idea-card > p { margin: 0; color: #303644; font-size: 12px; line-height: 1.65; white-space: pre-wrap; }
+.material-idea-card footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
+.material-idea-card time { color: #a0a5b0; font-size: 10px; }
+.material-idea-card footer > div { display: flex; align-items: center; gap: 3px; }
+.material-idea-card footer button { display: inline-flex; align-items: center; gap: 4px; padding: 5px; border: 0; border-radius: 6px; background: transparent; color: #777d8b; font-size: 10px; cursor: pointer; }
+.material-idea-card footer button:hover { background: #f0eff8; color: #5549cf; }
+.material-idea-card footer button.material-idea-use { padding-inline: 7px; background: #eeecff; color: #6256d8; }
+.material-idea-card footer button:disabled { opacity: .45; cursor: default; }
 .material-next-step label { display: block; margin-bottom: 7px; color: var(--text-secondary); font-size: 11px; }
 .material-topic-select { display: grid; grid-template-columns: 1fr 38px; gap: 7px; }
 .material-topic-select select,
 .material-new-topic input { min-width: 0; padding: 10px 11px; border: 1px solid #dfe2ea; border-radius: 8px; outline: none; background: #fafbfe; color: var(--text-primary); }
 .material-topic-select button { display: grid; place-items: center; border: 0; border-radius: 8px; background: #202534; color: #fff; cursor: pointer; }
 .material-topic-select button:disabled { opacity: .35; cursor: default; }
+.material-topic-select-wide { grid-template-columns: 1fr; }
+.material-topic-select-wide button { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; padding-inline: 12px; }
 .material-action-secondary,
 .material-action-quiet { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 9px; padding: 10px 11px; border: 1px solid #dfe2ea; border-radius: 8px; background: #fff; color: #313747; font-weight: 650; cursor: pointer; }
 .material-action-quiet { border-color: transparent; color: var(--text-secondary); font-weight: 500; }

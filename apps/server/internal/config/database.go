@@ -3,7 +3,9 @@ package config
 import (
 	"fmt"
 	"log"
+	"strings"
 
+	"github.com/google/uuid"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -51,7 +53,7 @@ func InitDB() {
 		&models.Tag{},
 		&models.NoteTag{},
 		&models.AiUsageLog{},
-		&models.Topic{}, &models.TopicMaterial{}, &models.Work{}, &models.Citation{},
+		&models.Topic{}, &models.TopicMaterial{}, &models.MaterialIdea{}, &models.TopicIdea{}, &models.Work{}, &models.Citation{},
 		&models.StyleProfile{}, &models.Revision{}, &models.Publication{}, &models.MaterialInsight{},
 		&models.UploadedFile{},
 		&models.LegalAcceptance{},
@@ -59,6 +61,9 @@ func InitDB() {
 	)
 	if err != nil {
 		log.Fatalf("Failed to auto-migrate: %v", err)
+	}
+	if err := migrateLegacyMaterialIdeas(DB); err != nil {
+		log.Fatalf("Failed to migrate creator notes: %v", err)
 	}
 	// Accounts that already had a creator profile before onboarding existed are
 	// existing users. Keep their current workspace intact and do not force them
@@ -88,6 +93,30 @@ func InitDB() {
 	}
 
 	fmt.Println("✅ Database migration complete")
+}
+
+func migrateLegacyMaterialIdeas(db *gorm.DB) error {
+	return db.Transaction(func(tx *gorm.DB) error {
+		var notes []models.Note
+		if err := tx.Where("creator_notes <> ''").Find(&notes).Error; err != nil {
+			return err
+		}
+		for _, note := range notes {
+			idea := models.MaterialIdea{
+				ID: uuid.NewSHA1(uuid.NameSpaceOID, []byte("notavia:legacy-creator-note:"+note.ID)).String(), UserID: note.UserID, NoteID: note.ID,
+				Content: strings.TrimSpace(note.CreatorNotes),
+			}
+			if idea.Content != "" {
+				if err := tx.FirstOrCreate(&idea, "id = ?", idea.ID).Error; err != nil {
+					return err
+				}
+			}
+			if err := tx.Model(&models.Note{}).Where("id = ? AND creator_notes = ?", note.ID, note.CreatorNotes).Update("creator_notes", "").Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func migrateCloudCredentials(db *gorm.DB, cipher *credential.Cipher) error {

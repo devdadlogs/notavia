@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Editor } from '@tiptap/react';
 import { EditorContent } from '@tiptap/react';
-import { ArrowRight, Check, ExternalLink, FilePlus2, FolderPlus, Highlighter, Loader2, Sparkles } from 'lucide-react';
+import { Check, ExternalLink, FilePlus2, FolderPlus, Highlighter, Loader2, Pencil, Quote, Sparkles, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
-import { creatorService, type Material, type MaterialInsight, type Topic } from '../../services/creator';
+import { creatorService, type Material, type MaterialIdea, type MaterialInsight, type Topic } from '../../services/creator';
 import WebSnapshot from './WebSnapshot';
 import EditorToolbar from './EditorToolbar';
 import AISlashCommand from './AISlashCommand';
@@ -35,19 +36,24 @@ const statusLabels = {
 };
 
 export default function MaterialWorkbench({ note, editor, title, onNoteChange }: Props) {
+  const navigate = useNavigate();
   const [insights, setInsights] = useState<MaterialInsight[]>(note.insights || []);
   const [insightStatus, setInsightStatus] = useState<'idle' | 'processing' | 'ready' | 'error'>(note.insights?.length ? 'ready' : 'idle');
-  const [creatorNotes, setCreatorNotes] = useState(note.creatorNotes || '');
+  const [ideas, setIdeas] = useState<MaterialIdea[]>(note.ideas || []);
+  const [ideaContent, setIdeaContent] = useState('');
+  const [sourceExcerpt, setSourceExcerpt] = useState('');
+  const [editingIdea, setEditingIdea] = useState<MaterialIdea | null>(null);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [selectedTopic, setSelectedTopic] = useState('');
   const [newTopicTitle, setNewTopicTitle] = useState(title);
   const [showNewTopic, setShowNewTopic] = useState(false);
-  const [busy, setBusy] = useState<'notes' | 'topic' | 'later' | ''>('');
+  const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
 
   useEffect(() => {
     void creatorService.listTopics().then(setTopics).catch(() => setTopics([]));
-  }, []);
+    void creatorService.listIdeas(note.id).then(setIdeas).catch(() => setMessage('想法加载失败，请刷新页面重试。'));
+  }, [note.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,14 +102,23 @@ export default function MaterialWorkbench({ note, editor, title, onNoteChange }:
     }
   };
 
-  const saveCreatorNotes = async () => {
-    setBusy('notes'); setMessage('');
+  const saveIdea = async () => {
+    const content = ideaContent.trim();
+    if (!content) { setMessage('请先写下你的想法。'); return; }
+    setBusy('idea-save'); setMessage('');
     try {
-      await api.put(`/notes/${note.id}`, { creatorNotes });
-      onNoteChange({ creatorNotes });
-      setMessage('你的想法已保存。');
-    } catch { setMessage('保存失败，请稍后重试。'); }
-    finally { setBusy(''); }
+      if (editingIdea) {
+        const updated = await creatorService.updateIdea(note.id, editingIdea.id, { content, sourceExcerpt });
+        setIdeas(current => current.map(idea => idea.id === updated.id ? updated : idea));
+      } else {
+        const created = await creatorService.createIdea(note.id, { content, sourceExcerpt });
+        setIdeas(current => [...current, created]);
+      }
+      setIdeaContent(''); setSourceExcerpt(''); setEditingIdea(null);
+      setMessage(editingIdea ? '想法已更新。' : '想法已保存，你可以继续添加。');
+    } catch {
+      setMessage('想法保存失败，请重试。');
+    } finally { setBusy(''); }
   };
 
   const captureSelection = () => {
@@ -113,9 +128,39 @@ export default function MaterialWorkbench({ note, editor, title, onNoteChange }:
       return;
     }
 
-    const quote = selectedText.slice(0, 2000).replace(/\n+/g, '\n> ');
-    setCreatorNotes(current => `${current.trim()}${current.trim() ? '\n\n' : ''}> ${quote}`);
-    setMessage('摘录已加入下方，补充你的判断后记得保存。');
+    setSourceExcerpt(selectedText.slice(0, 4000));
+    setMessage('原文摘录已带入，请补充你的判断。');
+  };
+
+  const startEditingIdea = (idea: MaterialIdea) => {
+    setEditingIdea(idea); setIdeaContent(idea.content); setSourceExcerpt(idea.sourceExcerpt || '');
+  };
+
+  const deleteIdea = async (idea: MaterialIdea) => {
+    if (!window.confirm('确定删除这条想法吗？已关联选题中的这条想法也会移除。')) return;
+    setBusy(`idea-delete-${idea.id}`); setMessage('');
+    try {
+      await creatorService.deleteIdea(note.id, idea.id);
+      setIdeas(current => current.filter(item => item.id !== idea.id));
+      if (editingIdea?.id === idea.id) { setEditingIdea(null); setIdeaContent(''); setSourceExcerpt(''); }
+      setMessage('想法已删除。');
+    } catch { setMessage('删除失败，请重试。'); }
+    finally { setBusy(''); }
+  };
+
+  const addIdeaToTopic = async (idea: MaterialIdea) => {
+    if (!selectedTopic) {
+      setMessage('请先在“下一步”中选择一个选题。');
+      const select = document.querySelector<HTMLSelectElement>('.material-next-step select');
+      select?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      window.setTimeout(() => select?.focus(), 250);
+      return;
+    }
+    setBusy(`idea-topic-${idea.id}`); setMessage('');
+    try {
+      await creatorService.addIdea(selectedTopic, idea.id);
+      navigate(`/topics/${selectedTopic}`);
+    } catch { setMessage('加入选题失败，请重试。'); setBusy(''); }
   };
 
   const addToTopic = async (topicId: string) => {
@@ -124,7 +169,7 @@ export default function MaterialWorkbench({ note, editor, title, onNoteChange }:
     try {
       await creatorService.addMaterial(topicId, note.id);
       onNoteChange({ materialStatus: 'used' });
-      setMessage('已加入选题，接下来可以继续补齐观点并开始写作。');
+      navigate(`/topics/${topicId}`);
     } catch { setMessage('加入选题失败，请稍后重试。'); }
     finally { setBusy(''); }
   };
@@ -184,16 +229,29 @@ export default function MaterialWorkbench({ note, editor, title, onNoteChange }:
         </section>
 
         <section className="material-panel-section">
-          <div className="material-section-title"><strong>我的摘录与判断</strong><small>真正属于你的内容</small></div>
+          <div className="material-section-title"><strong>我的想法</strong><small>{ideas.length ? `${ideas.length} 条` : '真正属于你的内容'}</small></div>
           <button className="material-capture-selection" onClick={captureSelection}><Highlighter size={14}/>摘录左侧选中文字</button>
-          <textarea value={creatorNotes} onChange={event => setCreatorNotes(event.target.value)} placeholder="这条素材让我想到什么？我同意什么，又反对什么？" />
-          <button className="material-save-note" onClick={saveCreatorNotes} disabled={busy === 'notes'}>{busy === 'notes' ? '保存中…' : '保存我的想法'}</button>
+          {sourceExcerpt && <div className="material-idea-excerpt-draft"><Quote size={13}/><span>{sourceExcerpt}</span><button onClick={() => setSourceExcerpt('')}>移除</button></div>}
+          <textarea value={ideaContent} onChange={event => setIdeaContent(event.target.value)} placeholder="这条素材让我想到什么？我同意什么，又反对什么？" />
+          <div className="material-note-save-row">
+            <button type="button" className="material-save-note" onClick={saveIdea} disabled={busy === 'idea-save' || !ideaContent.trim()}>{busy === 'idea-save' ? <><Loader2 className="spin" size={14}/>保存中…</> : editingIdea ? '更新想法' : '添加想法'}</button>
+            {editingIdea && <button className="material-idea-cancel" onClick={() => { setEditingIdea(null); setIdeaContent(''); setSourceExcerpt(''); }}>取消编辑</button>}
+          </div>
+          {ideas.length > 0 && <div className="material-idea-list">{ideas.map(idea => <article key={idea.id} className="material-idea-card">
+            {idea.sourceExcerpt && <blockquote>{idea.sourceExcerpt}</blockquote>}
+            <p>{idea.content}</p>
+            <footer><time>{new Date(idea.createdAt).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short' })}</time><div>
+              <button onClick={() => startEditingIdea(idea)} aria-label="编辑想法"><Pencil size={13}/></button>
+              <button onClick={() => void deleteIdea(idea)} disabled={busy === `idea-delete-${idea.id}`} aria-label="删除想法"><Trash2 size={13}/></button>
+              <button className="material-idea-use" onClick={() => void addIdeaToTopic(idea)} disabled={busy === `idea-topic-${idea.id}`}>{busy === `idea-topic-${idea.id}` ? <Loader2 className="spin" size={13}/> : null}加入选题</button>
+            </div></footer>
+          </article>)}</div>}
         </section>
 
         <section className="material-panel-section material-next-step">
           <div className="material-section-title"><strong>下一步</strong><small>让素材进入创作</small></div>
           <label>加入已有选题</label>
-          <div className="material-topic-select"><select value={selectedTopic} onChange={event => setSelectedTopic(event.target.value)}><option value="">选择一个选题</option>{topics.filter(topic => topic.status !== 'archived').map(topic => <option key={topic.id} value={topic.id}>{topic.title}</option>)}</select><button aria-label="加入选题" onClick={() => void addToTopic(selectedTopic)} disabled={!selectedTopic || busy === 'topic'}><ArrowRight size={16}/></button></div>
+          <div className="material-topic-select material-topic-select-wide"><select value={selectedTopic} onChange={event => setSelectedTopic(event.target.value)}><option value="">选择一个选题</option>{topics.filter(topic => topic.status !== 'archived').map(topic => <option key={topic.id} value={topic.id}>{topic.title}</option>)}</select><button onClick={() => void addToTopic(selectedTopic)} disabled={!selectedTopic || busy === 'topic'}>{busy === 'topic' ? <Loader2 className="spin" size={14}/> : null}加入并打开选题</button></div>
           {showNewTopic ? <div className="material-new-topic"><input autoFocus value={newTopicTitle} onChange={event => setNewTopicTitle(event.target.value)} placeholder="选题名称"/><div><button onClick={() => setShowNewTopic(false)}>取消</button><button onClick={createTopic} disabled={busy === 'topic'}><Check size={14}/>创建并继续</button></div></div> : <button className="material-action-secondary" onClick={() => setShowNewTopic(true)}><FilePlus2 size={15}/>从这条素材创建选题</button>}
           <button className="material-action-quiet" onClick={markForLater} disabled={busy === 'later'}><FolderPlus size={15}/>暂时收好，稍后处理</button>
         </section>

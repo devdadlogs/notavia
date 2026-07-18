@@ -146,6 +146,10 @@ func main() {
 		{
 			materials.GET("", handlers.ListMaterials)
 			materials.PUT("/:id/source", handlers.UpdateMaterialSource)
+			materials.GET("/:id/ideas", handlers.ListMaterialIdeas)
+			materials.POST("/:id/ideas", handlers.CreateMaterialIdea)
+			materials.PUT("/:id/ideas/:ideaId", handlers.UpdateMaterialIdea)
+			materials.DELETE("/:id/ideas/:ideaId", handlers.DeleteMaterialIdea)
 		}
 
 		topics := protected.Group("/topics")
@@ -157,6 +161,8 @@ func main() {
 			topics.DELETE("/:id", handlers.DeleteTopic)
 			topics.POST("/:id/materials", handlers.AddTopicMaterial)
 			topics.DELETE("/:id/materials/:noteId", handlers.RemoveTopicMaterial)
+			topics.POST("/:id/ideas", handlers.AddTopicIdea)
+			topics.DELETE("/:id/ideas/:ideaId", handlers.RemoveTopicIdea)
 		}
 
 		works := protected.Group("/works")

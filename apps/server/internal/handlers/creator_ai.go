@@ -242,11 +242,23 @@ func GenerateCreatorDraft(c *gin.Context) {
 		return
 	}
 	profile := loadStyleProfile(userID)
+	var topicIdeas []models.TopicIdea
+	config.DB.Where("topic_id = ?", topic.ID).Preload("Idea", "user_id = ?", userID).Find(&topicIdeas)
+	ideasByNote := map[string][]string{}
+	for _, link := range topicIdeas {
+		if link.Idea.ID != "" {
+			ideasByNote[link.Idea.NoteID] = append(ideasByNote[link.Idea.NoteID], link.Idea.Content)
+		}
+	}
 	materialData := make([]map[string]string, 0, len(notes))
 	selected := map[string]models.Note{}
 	for _, n := range notes {
 		selected[n.ID] = n
-		materialData = append(materialData, map[string]string{"id": n.ID, "title": n.Title, "content": truncateRunes(n.ContentText+"\n"+n.Transcript, 7000)})
+		materialData = append(materialData, map[string]string{
+			"id": n.ID, "title": n.Title,
+			"content":      truncateRunes(n.ContentText+"\n"+n.Transcript, 7000),
+			"creatorIdeas": strings.Join(ideasByNote[n.ID], "\n"),
+		})
 	}
 	materialJSON, _ := json.Marshal(materialData)
 	prompt := fmt.Sprintf(`你是当前创作者的写作助手。基于且仅基于给定私人素材写一篇知乎长文草稿。观点必须明确，表达自然，不得编造经历。需要常识补充时在原文后标记【模型补充·待核实】。

@@ -254,14 +254,24 @@ func ExportNotes(c *gin.Context) {
 	var revisions []models.Revision
 	var publications []models.Publication
 	var insights []models.MaterialInsight
+	var materialIdeas []models.MaterialIdea
+	var topicIdeas []models.TopicIdea
 	var style models.StyleProfile
-	config.DB.Where("user_id = ?", userID).Preload("Materials").Find(&topics)
+	config.DB.Where("user_id = ?", userID).Preload("Materials").Preload("Ideas").Find(&topics)
 	config.DB.Where("user_id = ?", userID).Preload("Citations").Find(&works)
 	config.DB.Where("user_id = ?", userID).Find(&revisions)
 	config.DB.Where("user_id = ?", userID).Find(&publications)
 	config.DB.Where("user_id = ?", userID).Find(&insights)
+	config.DB.Where("user_id = ?", userID).Find(&materialIdeas)
+	if len(topics) > 0 {
+		topicIDs := make([]string, 0, len(topics))
+		for _, topic := range topics {
+			topicIDs = append(topicIDs, topic.ID)
+		}
+		config.DB.Where("topic_id IN ?", topicIDs).Find(&topicIdeas)
+	}
 	config.DB.Where("user_id = ?", userID).First(&style)
-	snapshot := map[string]interface{}{"version": 1, "exportedAt": time.Now(), "materials": notes, "topics": topics, "works": works, "revisions": revisions, "publications": publications, "materialInsights": insights, "styleProfile": style}
+	snapshot := map[string]interface{}{"version": 2, "exportedAt": time.Now(), "materials": notes, "materialIdeas": materialIdeas, "topicIdeas": topicIdeas, "topics": topics, "works": works, "revisions": revisions, "publications": publications, "materialInsights": insights, "styleProfile": style}
 	if payload, err := json.MarshalIndent(snapshot, "", "  "); err == nil {
 		if f, err := zipWriter.Create("notavia-creator-data.json"); err == nil {
 			_, _ = f.Write(payload)
@@ -546,6 +556,18 @@ func DeleteNotePermanent(c *gin.Context) {
 		if err := tx.Where("note_id = ?", noteID).Delete(&models.MaterialInsight{}).Error; err != nil {
 			return err
 		}
+		var ideaIDs []string
+		if err := tx.Model(&models.MaterialIdea{}).Where("note_id = ?", noteID).Pluck("id", &ideaIDs).Error; err != nil {
+			return err
+		}
+		if len(ideaIDs) > 0 {
+			if err := tx.Where("idea_id IN ?", ideaIDs).Delete(&models.TopicIdea{}).Error; err != nil {
+				return err
+			}
+		}
+		if err := tx.Where("note_id = ?", noteID).Delete(&models.MaterialIdea{}).Error; err != nil {
+			return err
+		}
 		return tx.Delete(&note).Error
 	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to permanently delete note"})
@@ -572,6 +594,18 @@ func EmptyTrash(c *gin.Context) {
 				return err
 			}
 			if err := tx.Where("note_id = ?", note.ID).Delete(&models.MaterialInsight{}).Error; err != nil {
+				return err
+			}
+			var ideaIDs []string
+			if err := tx.Model(&models.MaterialIdea{}).Where("note_id = ?", note.ID).Pluck("id", &ideaIDs).Error; err != nil {
+				return err
+			}
+			if len(ideaIDs) > 0 {
+				if err := tx.Where("idea_id IN ?", ideaIDs).Delete(&models.TopicIdea{}).Error; err != nil {
+					return err
+				}
+			}
+			if err := tx.Where("note_id = ?", note.ID).Delete(&models.MaterialIdea{}).Error; err != nil {
 				return err
 			}
 		}

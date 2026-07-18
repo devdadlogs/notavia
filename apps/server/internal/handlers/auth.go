@@ -344,11 +344,13 @@ func DeleteAccount(c *gin.Context) {
 		tx.Where("user_id = ?", userID).Delete(&models.Work{})
 		if len(topicIDs) > 0 {
 			tx.Where("topic_id IN ?", topicIDs).Delete(&models.TopicMaterial{})
+			tx.Where("topic_id IN ?", topicIDs).Delete(&models.TopicIdea{})
 		}
 		if len(noteIDs) > 0 {
 			tx.Where("note_id IN ?", noteIDs).Delete(&models.NoteTag{})
 		}
 		tx.Where("user_id = ?", userID).Delete(&models.MaterialInsight{})
+		tx.Where("user_id = ?", userID).Delete(&models.MaterialIdea{})
 		tx.Where("user_id = ?", userID).Delete(&models.Note{})
 		tx.Where("user_id = ?", userID).Delete(&models.Tag{})
 		tx.Where("user_id = ?", userID).Delete(&models.Notebook{})

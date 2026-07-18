@@ -57,3 +57,36 @@ func TestCloudCredentialMigrationRejectsWrongKey(t *testing.T) {
 		t.Fatal("wrong credential key must be rejected")
 	}
 }
+
+func TestLegacyCreatorNotesBecomeOneMaterialIdeaOnlyOnce(t *testing.T) {
+	db, _ := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	if err := db.AutoMigrate(&models.Note{}, &models.MaterialIdea{}); err != nil {
+		t.Fatal(err)
+	}
+	db.Create(&models.Note{ID: "legacy-note", UserID: "legacy-user", Title: "旧素材", CreatorNotes: "以前保存的判断"})
+	if err := migrateLegacyMaterialIdeas(db); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateLegacyMaterialIdeas(db); err != nil {
+		t.Fatal(err)
+	}
+	var ideas []models.MaterialIdea
+	db.Where("note_id = ?", "legacy-note").Find(&ideas)
+	if len(ideas) != 1 || ideas[0].Content != "以前保存的判断" || ideas[0].UserID != "legacy-user" {
+		t.Fatalf("unexpected migrated ideas: %#v", ideas)
+	}
+	var note models.Note
+	db.First(&note, "id = ?", "legacy-note")
+	if note.CreatorNotes != "" {
+		t.Fatalf("legacy creator notes were not cleared: %q", note.CreatorNotes)
+	}
+	db.Delete(&ideas[0])
+	if err := migrateLegacyMaterialIdeas(db); err != nil {
+		t.Fatal(err)
+	}
+	var count int64
+	db.Model(&models.MaterialIdea{}).Where("note_id = ?", "legacy-note").Count(&count)
+	if count != 0 {
+		t.Fatal("deleted migrated idea must not return after restart")
+	}
+}

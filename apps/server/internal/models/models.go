@@ -104,6 +104,7 @@ type Note struct {
 	Notebook *Notebook         `json:"notebook,omitempty" gorm:"foreignKey:NotebookID"`
 	Tags     []NoteTag         `json:"tags,omitempty" gorm:"foreignKey:NoteID"`
 	Insights []MaterialInsight `json:"insights,omitempty" gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"`
+	Ideas    []MaterialIdea    `json:"ideas,omitempty" gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"`
 }
 
 type Topic struct {
@@ -119,6 +120,7 @@ type Topic struct {
 	CreatedAt      time.Time       `json:"createdAt" gorm:"autoCreateTime"`
 	UpdatedAt      time.Time       `json:"updatedAt" gorm:"autoUpdateTime"`
 	Materials      []TopicMaterial `json:"materials,omitempty" gorm:"foreignKey:TopicID;constraint:OnDelete:CASCADE"`
+	Ideas          []TopicIdea     `json:"ideas,omitempty" gorm:"foreignKey:TopicID;constraint:OnDelete:CASCADE"`
 	Works          []Work          `json:"works,omitempty" gorm:"foreignKey:TopicID;constraint:OnDelete:CASCADE"`
 }
 
@@ -127,6 +129,23 @@ type TopicMaterial struct {
 	NoteID    string    `json:"noteId" gorm:"primaryKey;type:varchar(36);index"`
 	CreatedAt time.Time `json:"createdAt" gorm:"autoCreateTime"`
 	Note      Note      `json:"note,omitempty" gorm:"foreignKey:NoteID"`
+}
+
+type MaterialIdea struct {
+	ID            string    `json:"id" gorm:"primaryKey;type:varchar(36)"`
+	UserID        string    `json:"userId" gorm:"not null;index"`
+	NoteID        string    `json:"noteId" gorm:"not null;index"`
+	Content       string    `json:"content" gorm:"type:text;not null"`
+	SourceExcerpt string    `json:"sourceExcerpt" gorm:"type:text"`
+	CreatedAt     time.Time `json:"createdAt" gorm:"autoCreateTime"`
+	UpdatedAt     time.Time `json:"updatedAt" gorm:"autoUpdateTime"`
+}
+
+type TopicIdea struct {
+	TopicID   string       `json:"topicId" gorm:"primaryKey;type:varchar(36)"`
+	IdeaID    string       `json:"ideaId" gorm:"primaryKey;type:varchar(36);index"`
+	CreatedAt time.Time    `json:"createdAt" gorm:"autoCreateTime"`
+	Idea      MaterialIdea `json:"idea,omitempty" gorm:"foreignKey:IdeaID"`
 }
 
 type Work struct {

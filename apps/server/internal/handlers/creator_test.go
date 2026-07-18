@@ -53,10 +53,97 @@ func setupCreatorTestDB(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.Topic{}, &models.TopicMaterial{}, &models.Note{}, &models.Work{}, &models.Citation{}, &models.Publication{}, &models.Revision{}, &models.StyleProfile{}, &models.MaterialInsight{}); err != nil {
+	if err := db.AutoMigrate(&models.Topic{}, &models.TopicMaterial{}, &models.Note{}, &models.MaterialIdea{}, &models.TopicIdea{}, &models.Work{}, &models.Citation{}, &models.Publication{}, &models.Revision{}, &models.StyleProfile{}, &models.MaterialInsight{}); err != nil {
 		t.Fatal(err)
 	}
 	config.DB = db
+}
+
+func materialIdeaRequest(method, path, userID, materialID, ideaID string, body any, handler gin.HandlerFunc) *httptest.ResponseRecorder {
+	var payload []byte
+	if body != nil {
+		payload, _ = json.Marshal(body)
+	}
+	req := httptest.NewRequest(method, path, bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = req
+	c.Params = gin.Params{{Key: "id", Value: materialID}}
+	if ideaID != "" {
+		c.Params = append(c.Params, gin.Param{Key: "ideaId", Value: ideaID})
+	}
+	c.Set("userID", userID)
+	handler(c)
+	return w
+}
+
+func TestMaterialIdeasCanBeCreatedAndListed(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupCreatorTestDB(t)
+	note := models.Note{ID: "note-ideas", UserID: "user-a", Title: "测试素材"}
+	config.DB.Create(&note)
+
+	w := materialIdeaRequest(http.MethodPost, "/materials/note-ideas/ideas", note.UserID, note.ID, "", map[string]string{
+		"content":       "这是我的第一个判断",
+		"sourceExcerpt": "这是原文摘录",
+	}, CreateMaterialIdea)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create idea: %d %s", w.Code, w.Body.String())
+	}
+
+	w = materialIdeaRequest(http.MethodPost, "/materials/note-ideas/ideas", note.UserID, note.ID, "", map[string]string{
+		"content": "这是第二个想法",
+	}, CreateMaterialIdea)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create second idea: %d %s", w.Code, w.Body.String())
+	}
+
+	w = materialIdeaRequest(http.MethodGet, "/materials/note-ideas/ideas", note.UserID, note.ID, "", nil, ListMaterialIdeas)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list ideas: %d %s", w.Code, w.Body.String())
+	}
+	var ideas []models.MaterialIdea
+	if err := json.Unmarshal(w.Body.Bytes(), &ideas); err != nil {
+		t.Fatal(err)
+	}
+	if len(ideas) != 2 {
+		t.Fatalf("unexpected ideas: %#v", ideas)
+	}
+	byContent := map[string]models.MaterialIdea{}
+	for _, idea := range ideas {
+		byContent[idea.Content] = idea
+	}
+	if byContent["这是我的第一个判断"].SourceExcerpt != "这是原文摘录" || byContent["这是第二个想法"].ID == "" {
+		t.Fatalf("unexpected ideas: %#v", ideas)
+	}
+}
+
+func TestMaterialIdeasCanOnlyBeChangedByTheirOwner(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupCreatorTestDB(t)
+	note := models.Note{ID: "owned-note", UserID: "owner", Title: "测试素材"}
+	idea := models.MaterialIdea{ID: "owned-idea", UserID: note.UserID, NoteID: note.ID, Content: "原想法"}
+	config.DB.Create(&note)
+	config.DB.Create(&idea)
+
+	w := materialIdeaRequest(http.MethodPut, "/materials/owned-note/ideas/owned-idea", "other-user", note.ID, idea.ID, map[string]string{"content": "越权修改"}, UpdateMaterialIdea)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("other user must not update idea, got %d %s", w.Code, w.Body.String())
+	}
+	w = materialIdeaRequest(http.MethodDelete, "/materials/owned-note/ideas/owned-idea", "other-user", note.ID, idea.ID, nil, DeleteMaterialIdea)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("other user must not delete idea, got %d %s", w.Code, w.Body.String())
+	}
+
+	w = materialIdeaRequest(http.MethodPut, "/materials/owned-note/ideas/owned-idea", note.UserID, note.ID, idea.ID, map[string]string{"content": "修改后的想法", "sourceExcerpt": "对应原文"}, UpdateMaterialIdea)
+	if w.Code != http.StatusOK {
+		t.Fatalf("owner update: %d %s", w.Code, w.Body.String())
+	}
+	w = materialIdeaRequest(http.MethodDelete, "/materials/owned-note/ideas/owned-idea", note.UserID, note.ID, idea.ID, nil, DeleteMaterialIdea)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("owner delete: %d %s", w.Code, w.Body.String())
+	}
 }
 
 type blockingInsightProvider struct {
@@ -195,5 +282,69 @@ func TestAddingMaterialToTopicMarksItUsed(t *testing.T) {
 	config.DB.First(&note, "id = ?", note.ID)
 	if note.MaterialStatus != "used" {
 		t.Fatalf("expected material status used, got %q", note.MaterialStatus)
+	}
+}
+
+func TestAddingIdeaToTopicAlsoAddsItsMaterial(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupCreatorTestDB(t)
+	topic := models.Topic{ID: "topic-with-idea", UserID: "user-a", Title: "测试选题", Status: "idea"}
+	note := models.Note{ID: "idea-note", UserID: topic.UserID, Title: "测试素材", MaterialStatus: "distilled"}
+	idea := models.MaterialIdea{ID: "idea-a", UserID: topic.UserID, NoteID: note.ID, Content: "值得继续写的判断"}
+	config.DB.Create(&topic)
+	config.DB.Create(&note)
+	config.DB.Create(&idea)
+
+	w := materialIdeaRequest(http.MethodPost, "/topics/topic-with-idea/ideas", topic.UserID, topic.ID, "", map[string]string{"ideaId": idea.ID}, AddTopicIdea)
+	if w.Code != http.StatusOK {
+		t.Fatalf("add idea: %d %s", w.Code, w.Body.String())
+	}
+	var ideaLinks, materialLinks int64
+	config.DB.Model(&models.TopicIdea{}).Where("topic_id = ? AND idea_id = ?", topic.ID, idea.ID).Count(&ideaLinks)
+	config.DB.Model(&models.TopicMaterial{}).Where("topic_id = ? AND note_id = ?", topic.ID, note.ID).Count(&materialLinks)
+	if ideaLinks != 1 || materialLinks != 1 {
+		t.Fatalf("expected idea and material links, got ideas=%d materials=%d", ideaLinks, materialLinks)
+	}
+	config.DB.First(&note, "id = ?", note.ID)
+	if note.MaterialStatus != "used" {
+		t.Fatalf("expected material status used, got %q", note.MaterialStatus)
+	}
+	w = materialIdeaRequest(http.MethodGet, "/topics/topic-with-idea", topic.UserID, topic.ID, "", nil, GetTopic)
+	if w.Code != http.StatusOK {
+		t.Fatalf("get topic: %d %s", w.Code, w.Body.String())
+	}
+	var loaded models.Topic
+	if err := json.Unmarshal(w.Body.Bytes(), &loaded); err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Ideas) != 1 || loaded.Ideas[0].Idea.Content != idea.Content {
+		t.Fatalf("topic did not include linked idea: %#v", loaded.Ideas)
+	}
+}
+
+func TestRemovingMaterialFromTopicAlsoRemovesItsIdeaLinks(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupCreatorTestDB(t)
+	topic := models.Topic{ID: "topic-remove-material", UserID: "user-a", Title: "测试选题", Status: "idea"}
+	note := models.Note{ID: "remove-note", UserID: topic.UserID, Title: "测试素材", MaterialStatus: "used"}
+	idea := models.MaterialIdea{ID: "remove-idea", UserID: topic.UserID, NoteID: note.ID, Content: "关联想法"}
+	config.DB.Create(&topic)
+	config.DB.Create(&note)
+	config.DB.Create(&idea)
+	config.DB.Create(&models.TopicMaterial{TopicID: topic.ID, NoteID: note.ID})
+	config.DB.Create(&models.TopicIdea{TopicID: topic.ID, IdeaID: idea.ID})
+
+	w := materialIdeaRequest(http.MethodDelete, "/topics/topic-remove-material/materials/remove-note", topic.UserID, topic.ID, "", nil, func(c *gin.Context) {
+		c.Params = append(c.Params, gin.Param{Key: "noteId", Value: note.ID})
+		RemoveTopicMaterial(c)
+	})
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("remove material: %d %s", w.Code, w.Body.String())
+	}
+	var materialLinks, ideaLinks int64
+	config.DB.Model(&models.TopicMaterial{}).Where("topic_id = ?", topic.ID).Count(&materialLinks)
+	config.DB.Model(&models.TopicIdea{}).Where("topic_id = ?", topic.ID).Count(&ideaLinks)
+	if materialLinks != 0 || ideaLinks != 0 {
+		t.Fatalf("links were not removed: materials=%d ideas=%d", materialLinks, ideaLinks)
 	}
 }

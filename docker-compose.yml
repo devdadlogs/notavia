@@ -26,7 +26,9 @@ services:
       QDRANT_URL: http://qdrant:6333
       WHISPER_BASE_URL: http://whisper:9000/v1
     volumes:
-      - notavia_data:/app/data
+      - type: bind
+        source: ${NOTAVIA_DATA_DIR:-./.notavia-data}/app
+        target: /app/data
     depends_on:
       ollama-init:
         condition: service_started
@@ -53,7 +55,9 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - type: bind
+        source: ${NOTAVIA_DATA_DIR:-./.notavia-data}/postgres
+        target: /var/lib/postgresql/data
     restart: unless-stopped
 
   # ── Redis (for background job queue & caching) ────────────
@@ -64,7 +68,9 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - redis_data:/data
+      - type: bind
+        source: ${NOTAVIA_DATA_DIR:-./.notavia-data}/redis
+        target: /data
     restart: unless-stopped
 
   # ── Ollama (Local AI Runtime) ─────────────────────────────
@@ -74,7 +80,9 @@ services:
     ports:
       - "11434:11434"
     volumes:
-      - ollama_data:/root/.ollama
+      - type: bind
+        source: ${NOTAVIA_DATA_DIR:-./.notavia-data}/ollama
+        target: /root/.ollama
     restart: unless-stopped
     # Uncomment below for GPU acceleration (NVIDIA):
     # deploy:
@@ -107,7 +115,9 @@ services:
     ports:
       - "6333:6333"
     volumes:
-      - qdrant_data:/qdrant/storage
+      - type: bind
+        source: ${NOTAVIA_DATA_DIR:-./.notavia-data}/qdrant
+        target: /qdrant/storage
     restart: unless-stopped
 
   # ── Whisper (Local Audio Transcription) ───────────────────
@@ -120,13 +130,7 @@ services:
       - ASR_MODEL=small # Options: tiny, base, small, medium, large
       - ASR_ENGINE=openai_whisper
     volumes:
-      - whisper_data:/root/.cache/whisper
+      - type: bind
+        source: ${NOTAVIA_DATA_DIR:-./.notavia-data}/whisper
+        target: /root/.cache/whisper
     restart: unless-stopped
-
-volumes:
-  notavia_data:
-  postgres_data:
-  redis_data:
-  ollama_data:
-  qdrant_data:
-  whisper_data:

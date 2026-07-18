@@ -1,7 +1,3 @@
 packages:
   - "apps/*"
   - "packages/*"
-
-overrides:
-  "@tiptap/pm": "3.26.1"
-  "@tiptap/core": "3.26.1"

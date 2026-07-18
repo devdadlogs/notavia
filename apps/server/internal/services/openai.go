@@ -27,7 +27,7 @@ func NewOpenAIProvider(baseURL, apiKey, model string) *OpenAIProvider {
 	if model == "" {
 		model = "gpt-4o-mini"
 	}
-	
+
 	// Clean up apiKey
 	apiKey = strings.TrimSpace(apiKey)
 	apiKey = strings.TrimPrefix(apiKey, "Bearer ")
@@ -320,7 +320,7 @@ func (p *OpenAIProvider) TranscribeAudio(filePath string) (string, error) {
 	if err := writer.WriteField("response_format", "vtt"); err != nil {
 		return "", err
 	}
-	
+
 	// Add initial prompt to improve accuracy and punctuation for Chinese
 	prompt := "以下是一段会议记录，请使用简体中文、准确的标点符号进行转写。"
 	if err := writer.WriteField("prompt", prompt); err != nil {
@@ -345,7 +345,7 @@ func (p *OpenAIProvider) TranscribeAudio(filePath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("transcription failed with status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
@@ -409,6 +409,6 @@ func formatVTT(vtt string) string {
 	if len(result) == 0 {
 		return vtt // return original if parsing failed
 	}
-	
+
 	return strings.Join(result, "\n")
 }

@@ -72,12 +72,12 @@ func SummarizeStream(provider LLMProvider, content string, mode string, outChan 
 		var summaries []string
 		for i, chunk := range chunks {
 			outChan <- fmt.Sprintf("⏳ 正在提炼第 %d/%d 部分...\n", i+1, len(chunks))
-			
+
 			mapPrompt := fmt.Sprintf(`请概括以下文档片段的核心要点（只需要点，无需连贯成文）：
 
 片段内容：
 %s`, chunk)
-			
+
 			summary, err := provider.Generate(mapPrompt)
 			if err != nil {
 				errChan <- fmt.Errorf("chunk %d generation failed: %w", i+1, err)
@@ -157,12 +157,12 @@ func ExtractKeyPointsStream(provider LLMProvider, content string, outChan chan<-
 		var extractedPoints []string
 		for i, chunk := range chunks {
 			outChan <- fmt.Sprintf("⏳ 正在扫读第 %d/%d 部分...\n", i+1, len(chunks))
-			
+
 			mapPrompt := fmt.Sprintf(`从以下笔记内容中提取关键信息，按核心观点、待办事项、关键数据、决策项分类输出。直接输出，无前缀。
 
 片段内容：
 %s`, chunk)
-			
+
 			summary, err := provider.Generate(mapPrompt)
 			if err != nil {
 				errChan <- fmt.Errorf("chunk %d generation failed: %w", i+1, err)

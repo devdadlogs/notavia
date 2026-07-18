@@ -30,8 +30,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -45,7 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: ShellCheck
-        uses: ludeeus/action-shellcheck@2.0.0
+        run: shellcheck -x start.sh scripts/*.sh
       - run: bash scripts/persistence_test.sh
       - run: bash scripts/compose_security_test.sh
       - name: Validate Compose

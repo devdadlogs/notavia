@@ -12,7 +12,7 @@ export interface Material {
 
 export interface MaterialIdea {
   id: string; noteId: string; content: string; sourceExcerpt?: string;
-  createdAt: string; updatedAt: string;
+  createdAt: string; updatedAt: string; topicLinks?: Array<{ topicId: string; title: string }>;
 }
 
 export interface MaterialInsight {
@@ -46,6 +46,11 @@ export interface Topic {
   works?: Work[]; createdAt: string; updatedAt: string;
 }
 
+export interface TopicBriefSuggestion {
+  title: string; coreQuestion: string; targetAudience: string;
+  conclusion: string; desiredAction: string; reason: string;
+}
+
 export interface Publication {
   id: string; workId: string; platform: string; url: string; publishedAt: string;
   views: number; likes: number; favorites: number; comments: number; notes: string;
@@ -68,6 +73,7 @@ export const creatorService = {
   retrieve: async (query: string) => (await api.post('/creator-ai/retrieve', { query, limit: 12 })).data.results,
   extractInsights: async (noteId: string) => (await api.post<MaterialInsightStatus>('/creator-ai/insights', { noteId })).data,
   getInsightStatus: async (noteId: string) => (await api.get<MaterialInsightStatus>(`/creator-ai/insights/${noteId}/status`)).data,
+  suggestTopicBrief: async (topicId: string) => (await api.post<TopicBriefSuggestion>('/creator-ai/topic-brief', { topicId })).data,
   generateDraft: async (topicId: string, materialIds: string[]) => (await api.post('/creator-ai/draft', { topicId, materialIds })).data,
   reviewStyle: async (workId: string) => (await api.post('/creator-ai/style-review', { workId })).data,
   transform: async (workId: string, platform: Platform) => (await api.post('/creator-ai/transform', { workId, platform })).data,

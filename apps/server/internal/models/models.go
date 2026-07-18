@@ -132,13 +132,19 @@ type TopicMaterial struct {
 }
 
 type MaterialIdea struct {
-	ID            string    `json:"id" gorm:"primaryKey;type:varchar(36)"`
-	UserID        string    `json:"userId" gorm:"not null;index"`
-	NoteID        string    `json:"noteId" gorm:"not null;index"`
-	Content       string    `json:"content" gorm:"type:text;not null"`
-	SourceExcerpt string    `json:"sourceExcerpt" gorm:"type:text"`
-	CreatedAt     time.Time `json:"createdAt" gorm:"autoCreateTime"`
-	UpdatedAt     time.Time `json:"updatedAt" gorm:"autoUpdateTime"`
+	ID            string              `json:"id" gorm:"primaryKey;type:varchar(36)"`
+	UserID        string              `json:"userId" gorm:"not null;index"`
+	NoteID        string              `json:"noteId" gorm:"not null;index"`
+	Content       string              `json:"content" gorm:"type:text;not null"`
+	SourceExcerpt string              `json:"sourceExcerpt" gorm:"type:text"`
+	CreatedAt     time.Time           `json:"createdAt" gorm:"autoCreateTime"`
+	UpdatedAt     time.Time           `json:"updatedAt" gorm:"autoUpdateTime"`
+	TopicLinks    []MaterialIdeaTopic `json:"topicLinks,omitempty" gorm:"-"`
+}
+
+type MaterialIdeaTopic struct {
+	TopicID string `json:"topicId"`
+	Title   string `json:"title"`
 }
 
 type TopicIdea struct {

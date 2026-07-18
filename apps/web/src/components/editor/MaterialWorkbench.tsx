@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Editor } from '@tiptap/react';
 import { EditorContent } from '@tiptap/react';
-import { Check, ExternalLink, FilePlus2, FolderPlus, Highlighter, Loader2, Pencil, Quote, Sparkles, Trash2 } from 'lucide-react';
+import { AlertCircle, Check, ExternalLink, FilePlus2, FolderPlus, Highlighter, Loader2, Pencil, Quote, Sparkles, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { creatorService, type Material, type MaterialIdea, type MaterialInsight, type Topic } from '../../services/creator';
@@ -43,6 +43,8 @@ export default function MaterialWorkbench({ note, editor, title, onNoteChange }:
   const [ideaContent, setIdeaContent] = useState('');
   const [sourceExcerpt, setSourceExcerpt] = useState('');
   const [editingIdea, setEditingIdea] = useState<MaterialIdea | null>(null);
+  const [ideaPickerId, setIdeaPickerId] = useState('');
+  const [ideaFeedback, setIdeaFeedback] = useState<Record<string, string>>({});
   const [topics, setTopics] = useState<Topic[]>([]);
   const [selectedTopic, setSelectedTopic] = useState('');
   const [newTopicTitle, setNewTopicTitle] = useState(title);
@@ -148,19 +150,21 @@ export default function MaterialWorkbench({ note, editor, title, onNoteChange }:
     finally { setBusy(''); }
   };
 
-  const addIdeaToTopic = async (idea: MaterialIdea) => {
-    if (!selectedTopic) {
-      setMessage('请先在“下一步”中选择一个选题。');
-      const select = document.querySelector<HTMLSelectElement>('.material-next-step select');
-      select?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      window.setTimeout(() => select?.focus(), 250);
-      return;
-    }
+  const updateIdeaTopic = async (idea: MaterialIdea, topic: Topic, linked: boolean) => {
     setBusy(`idea-topic-${idea.id}`); setMessage('');
     try {
-      await creatorService.addIdea(selectedTopic, idea.id);
-      navigate(`/topics/${selectedTopic}`);
-    } catch { setMessage('加入选题失败，请重试。'); setBusy(''); }
+      if (linked) await creatorService.removeIdea(topic.id, idea.id);
+      else await creatorService.addIdea(topic.id, idea.id);
+      setIdeas(current => current.map(item => item.id === idea.id ? {
+        ...item,
+        topicLinks: linked
+          ? (item.topicLinks || []).filter(link => link.topicId !== topic.id)
+          : [...(item.topicLinks || []).filter(link => link.topicId !== topic.id), { topicId: topic.id, title: topic.title }],
+      } : item));
+      setIdeaFeedback(current => ({ ...current, [idea.id]: linked ? `已从《${topic.title}》移除` : `已作为观点加入《${topic.title}》` }));
+    } catch {
+      setIdeaFeedback(current => ({ ...current, [idea.id]: `${linked ? '移除' : '加入'}失败，请重试` }));
+    } finally { setBusy(''); }
   };
 
   const addToTopic = async (topicId: string) => {
@@ -240,11 +244,17 @@ export default function MaterialWorkbench({ note, editor, title, onNoteChange }:
           {ideas.length > 0 && <div className="material-idea-list">{ideas.map(idea => <article key={idea.id} className="material-idea-card">
             {idea.sourceExcerpt && <blockquote>{idea.sourceExcerpt}</blockquote>}
             <p>{idea.content}</p>
+            {(idea.topicLinks?.length || 0) > 0 && <div className="material-idea-links"><span>已作为观点用于</span>{idea.topicLinks!.map(link => <button key={link.topicId} onClick={() => navigate(`/topics/${link.topicId}`)}>{link.title}<ExternalLink size={10}/></button>)}</div>}
+            {ideaFeedback[idea.id] && <div className={`material-idea-feedback${ideaFeedback[idea.id].includes('失败') ? ' is-error' : ''}`}>{ideaFeedback[idea.id].includes('失败') ? <AlertCircle size={12}/> : <Check size={12}/>} {ideaFeedback[idea.id]}</div>}
             <footer><time>{new Date(idea.createdAt).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short' })}</time><div>
               <button onClick={() => startEditingIdea(idea)} aria-label="编辑想法"><Pencil size={13}/></button>
               <button onClick={() => void deleteIdea(idea)} disabled={busy === `idea-delete-${idea.id}`} aria-label="删除想法"><Trash2 size={13}/></button>
-              <button className="material-idea-use" onClick={() => void addIdeaToTopic(idea)} disabled={busy === `idea-topic-${idea.id}`}>{busy === `idea-topic-${idea.id}` ? <Loader2 className="spin" size={13}/> : null}加入选题</button>
+              <button className="material-idea-use" onClick={() => { setIdeaFeedback(current => ({ ...current, [idea.id]: '' })); setIdeaPickerId(current => current === idea.id ? '' : idea.id); }}>{(idea.topicLinks?.length || 0) > 0 ? '管理选题' : '作为观点用于选题'}</button>
             </div></footer>
+            {ideaPickerId === idea.id && <div className="material-idea-topic-picker"><strong>选择要采用这条观点的选题</strong><small>生成草稿时，AI 会把它当作你的明确立场。</small><div>{topics.filter(topic => topic.status !== 'archived').map(topic => {
+              const linked = idea.topicLinks?.some(link => link.topicId === topic.id);
+              return <button key={topic.id} className={linked ? 'is-linked' : ''} disabled={busy === `idea-topic-${idea.id}`} onClick={() => void updateIdeaTopic(idea, topic, Boolean(linked))}>{linked ? <Check size={13}/> : null}<span>{topic.title}</span><em>{linked ? '移除' : '加入'}</em></button>;
+            })}{topics.filter(topic => topic.status !== 'archived').length === 0 && <p>还没有可用选题，请先在下方创建选题。</p>}</div></div>}
           </article>)}</div>}
         </section>
 

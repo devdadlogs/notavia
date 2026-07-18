@@ -178,6 +178,7 @@ func main() {
 			creatorAI.POST("/retrieve", handlers.RetrieveCreatorMaterials)
 			creatorAI.POST("/insights", handlers.ExtractMaterialInsights)
 			creatorAI.GET("/insights/:noteId/status", handlers.GetMaterialInsightStatus)
+			creatorAI.POST("/topic-brief", handlers.SuggestTopicBrief)
 			creatorAI.POST("/draft", handlers.GenerateCreatorDraft)
 			creatorAI.POST("/style-review", handlers.ReviewCreatorStyle)
 			creatorAI.POST("/transform", handlers.TransformCreatorWork)

@@ -91,6 +91,13 @@ func TestMaterialIdeasCanBeCreatedAndListed(t *testing.T) {
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create idea: %d %s", w.Code, w.Body.String())
 	}
+	var firstIdea models.MaterialIdea
+	if err := json.Unmarshal(w.Body.Bytes(), &firstIdea); err != nil {
+		t.Fatal(err)
+	}
+	topic := models.Topic{ID: "idea-topic", UserID: note.UserID, Title: "已经采用的选题", Status: "idea"}
+	config.DB.Create(&topic)
+	config.DB.Create(&models.TopicIdea{TopicID: topic.ID, IdeaID: firstIdea.ID})
 
 	w = materialIdeaRequest(http.MethodPost, "/materials/note-ideas/ideas", note.UserID, note.ID, "", map[string]string{
 		"content": "这是第二个想法",
@@ -116,6 +123,9 @@ func TestMaterialIdeasCanBeCreatedAndListed(t *testing.T) {
 	}
 	if byContent["这是我的第一个判断"].SourceExcerpt != "这是原文摘录" || byContent["这是第二个想法"].ID == "" {
 		t.Fatalf("unexpected ideas: %#v", ideas)
+	}
+	if links := byContent["这是我的第一个判断"].TopicLinks; len(links) != 1 || links[0].TopicID != topic.ID || links[0].Title != topic.Title {
+		t.Fatalf("idea topic links missing: %#v", links)
 	}
 }
 
@@ -232,6 +242,52 @@ func TestTopicAPIKeepsUsersIsolated(t *testing.T) {
 	w = creatorRequest(http.MethodGet, "/topics/"+created.ID, "user-a", nil, GetTopic)
 	if w.Code != http.StatusOK {
 		t.Fatalf("owner should read topic, got %d", w.Code)
+	}
+}
+
+type topicSuggestionProvider struct{}
+
+func (p *topicSuggestionProvider) CheckHealth() (bool, error)      { return true, nil }
+func (p *topicSuggestionProvider) ListModels() ([]string, error)   { return nil, nil }
+func (p *topicSuggestionProvider) Generate(string) (string, error) { return "", nil }
+func (p *topicSuggestionProvider) GenerateJSON(string) (string, error) {
+	return `{"title":"善良会让人贫穷吗","coreQuestion":"善良和贫穷真的存在因果关系吗？","targetAudience":"容易把善良与吃亏混为一谈的普通人","conclusion":"善良不会直接导致贫穷，缺少边界和能力才会。","desiredAction":"重新区分善良、边界和生存能力。","reason":"素材里的具体事件与个人判断形成了可讨论的冲突。"}`, nil
+}
+func (p *topicSuggestionProvider) GenerateStream(string, chan<- string, chan<- error) {}
+func (p *topicSuggestionProvider) Embed(string) ([]float32, error)                    { return nil, nil }
+func (p *topicSuggestionProvider) TranscribeAudio(string) (string, error)             { return "", nil }
+
+func TestSuggestTopicBriefUsesOwnedTopicContext(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupCreatorTestDB(t)
+	topic := models.Topic{ID: "suggest-topic", UserID: "user-a", Title: "暂定标题", Status: "idea"}
+	note := models.Note{ID: "suggest-note", UserID: topic.UserID, Title: "菜摊老人", ContentText: "一位老人坚持把卖不完的菜送给更困难的人。"}
+	idea := models.MaterialIdea{ID: "suggest-idea", UserID: topic.UserID, NoteID: note.ID, Content: "善良需要边界和生存能力。"}
+	config.DB.Create(&topic)
+	config.DB.Create(&note)
+	config.DB.Create(&idea)
+	config.DB.Create(&models.TopicMaterial{TopicID: topic.ID, NoteID: note.ID})
+	config.DB.Create(&models.TopicIdea{TopicID: topic.ID, IdeaID: idea.ID})
+
+	originalProvider := creatorTopicSuggestionProvider
+	creatorTopicSuggestionProvider = func(string) services.LLMProvider { return &topicSuggestionProvider{} }
+	t.Cleanup(func() { creatorTopicSuggestionProvider = originalProvider })
+
+	w := creatorRequest(http.MethodPost, "/creator-ai/topic-brief", topic.UserID, map[string]string{"topicId": topic.ID}, SuggestTopicBrief)
+	if w.Code != http.StatusOK {
+		t.Fatalf("suggest topic brief: %d %s", w.Code, w.Body.String())
+	}
+	var brief map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &brief); err != nil {
+		t.Fatal(err)
+	}
+	if brief["coreQuestion"] == "" || brief["conclusion"] == "" || brief["reason"] == "" {
+		t.Fatalf("incomplete topic brief: %#v", brief)
+	}
+
+	w = creatorRequest(http.MethodPost, "/creator-ai/topic-brief", "user-b", map[string]string{"topicId": topic.ID}, SuggestTopicBrief)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("other user must not use topic context, got %d %s", w.Code, w.Body.String())
 	}
 }
 

@@ -58,6 +58,33 @@ func ListMaterialIdeas(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list material ideas"})
 		return
 	}
+	if len(ideas) > 0 {
+		ideaIDs := make([]string, 0, len(ideas))
+		ideaIndexes := make(map[string]int, len(ideas))
+		for index, idea := range ideas {
+			ideaIDs = append(ideaIDs, idea.ID)
+			ideaIndexes[idea.ID] = index
+		}
+		var links []struct {
+			IdeaID  string
+			TopicID string
+			Title   string
+		}
+		if err := config.DB.Table("topic_ideas").
+			Select("topic_ideas.idea_id, topics.id AS topic_id, topics.title").
+			Joins("JOIN topics ON topics.id = topic_ideas.topic_id").
+			Where("topic_ideas.idea_id IN ? AND topics.user_id = ?", ideaIDs, userID).
+			Order("topics.updated_at DESC").Scan(&links).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list idea topics"})
+			return
+		}
+		for _, link := range links {
+			index, ok := ideaIndexes[link.IdeaID]
+			if ok {
+				ideas[index].TopicLinks = append(ideas[index].TopicLinks, models.MaterialIdeaTopic{TopicID: link.TopicID, Title: link.Title})
+			}
+		}
+	}
 	c.JSON(http.StatusOK, ideas)
 }
 

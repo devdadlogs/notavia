@@ -338,6 +338,7 @@ func UpdateWork(c *gin.Context) {
 	var input struct {
 		Title               *string `json:"title"`
 		Content             *string `json:"content"`
+		ContentJSON         *string `json:"contentJson"`
 		Status              *string `json:"status"`
 		RevisionSummary     string  `json:"revisionSummary"`
 		Preference          string  `json:"preference"`
@@ -347,7 +348,7 @@ func UpdateWork(c *gin.Context) {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
-	status, title, content := w.Status, w.Title, w.Content
+	status, title, content, contentJSON := w.Status, w.Title, w.Content, w.ContentJSON
 	if input.Status != nil {
 		status = *input.Status
 	}
@@ -356,6 +357,9 @@ func UpdateWork(c *gin.Context) {
 	}
 	if input.Content != nil {
 		content = *input.Content
+	}
+	if input.ContentJSON != nil {
+		contentJSON = *input.ContentJSON
 	}
 	if !workStatuses[status] {
 		c.JSON(400, gin.H{"error": "invalid work status"})
@@ -383,7 +387,7 @@ func UpdateWork(c *gin.Context) {
 				}
 			}
 		}
-		w.Title, w.Content, w.Status = title, content, status
+		w.Title, w.Content, w.ContentJSON, w.Status = title, content, contentJSON, status
 		return tx.Save(&w).Error
 	})
 	if err != nil {

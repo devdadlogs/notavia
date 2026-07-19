@@ -180,7 +180,7 @@ func (s *OllamaService) GenerateJSON(prompt string) (string, error) {
 		Format: "json", // Enforces strict JSON output
 		Options: map[string]interface{}{
 			"temperature": 0.3, // Lower temperature for more predictable structured output
-			"num_predict": 512,
+			"num_predict": 2048,
 		},
 	}
 

@@ -47,6 +47,21 @@ func TestMaterialStatusValues(t *testing.T) {
 	}
 }
 
+func TestCleanStyleReviewIssuesKeepsOnlyActionableResults(t *testing.T) {
+	content := "这句话太绕了，读者不容易抓住重点。"
+	issues := cleanStyleReviewIssues([]styleReviewIssue{
+		{Type: "clarity", Severity: "medium", Quote: "这句话太绕了", Message: "口语化说明", Suggestion: "修改理由"},
+		{Type: "tone", Severity: "low", Quote: "不存在的原文", Message: "语气过于书面", Suggestion: "换成更直接的说法"},
+		{Type: "clarity", Severity: "medium", Quote: "读者不容易抓住重点", Message: "这句话没有说明具体重点是什么", Suggestion: "补上你希望读者记住的那句话", Replacement: "读者很难知道你真正想说什么"},
+	}, content)
+	if len(issues) != 1 {
+		t.Fatalf("expected one actionable issue, got %d: %#v", len(issues), issues)
+	}
+	if issues[0].Message != "这句话没有说明具体重点是什么" {
+		t.Fatalf("unexpected actionable issue: %#v", issues[0])
+	}
+}
+
 func setupCreatorTestDB(t *testing.T) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
@@ -271,6 +286,32 @@ func TestConfirmedPreferenceIsSavedWithoutContentChange(t *testing.T) {
 	}
 }
 
+func TestUpdateWorkPersistsRichTextDocument(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupCreatorTestDB(t)
+	work := models.Work{ID: "rich-work", UserID: "writer", TopicID: "topic", Platform: "zhihu", Title: "标题", Content: "原正文", Status: "draft"}
+	config.DB.Create(&work)
+	richDocument := `{"type":"doc","content":[{"type":"table"},{"type":"video","attrs":{"src":"/uploads/video.mp4"}}]}`
+
+	w := creatorRequest(http.MethodPut, "/works/"+work.ID, work.UserID, map[string]any{
+		"content":     "| 表头 |\\n| --- |\\n| 内容 |",
+		"contentJson": richDocument,
+	}, UpdateWork)
+	if w.Code != http.StatusOK {
+		t.Fatalf("save rich text: %d %s", w.Code, w.Body.String())
+	}
+	var saved models.Work
+	if err := config.DB.First(&saved, "id = ?", work.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if saved.ContentJSON != richDocument {
+		t.Fatalf("rich text document was not persisted: %q", saved.ContentJSON)
+	}
+	if !strings.Contains(saved.Content, "表头") {
+		t.Fatalf("markdown text for AI was not persisted: %q", saved.Content)
+	}
+}
+
 func TestTransformRejectsDerivedWorkAsSource(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	setupCreatorTestDB(t)
@@ -283,6 +324,78 @@ func TestTransformRejectsDerivedWorkAsSource(t *testing.T) {
 	}, TransformCreatorWork)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("derived work must not be transformed again, got %d %s", w.Code, w.Body.String())
+	}
+}
+
+type transformProvider struct{ response string }
+
+func (p *transformProvider) CheckHealth() (bool, error)      { return true, nil }
+func (p *transformProvider) ListModels() ([]string, error)   { return nil, nil }
+func (p *transformProvider) Generate(string) (string, error) { return "", nil }
+func (p *transformProvider) GenerateJSON(string) (string, error) {
+	return p.response, nil
+}
+func (p *transformProvider) GenerateStream(string, chan<- string, chan<- error) {}
+func (p *transformProvider) Embed(string) ([]float32, error)                    { return nil, nil }
+func (p *transformProvider) TranscribeAudio(string) (string, error)             { return "", nil }
+
+func TestTransformRejectsEmptyGeneratedContent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupCreatorTestDB(t)
+	work := models.Work{ID: "main-work", UserID: "writer", TopicID: "topic", Platform: "zhihu", Title: "主版本", Content: "一段完整正文", Status: "draft"}
+	config.DB.Create(&work)
+
+	originalProvider := creatorTransformProvider
+	creatorTransformProvider = func(string) services.LLMProvider {
+		return &transformProvider{response: `{"title":"三个标题候选","content":"","risks":[]}`}
+	}
+	t.Cleanup(func() { creatorTransformProvider = originalProvider })
+
+	w := creatorRequest(http.MethodPost, "/creator-ai/transform", work.UserID, map[string]string{
+		"workId": work.ID, "platform": "xiaohongshu",
+	}, TransformCreatorWork)
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("empty generated content must be rejected, got %d %s", w.Code, w.Body.String())
+	}
+	var count int64
+	config.DB.Model(&models.Work{}).Where("topic_id = ?", work.TopicID).Count(&count)
+	if count != 1 {
+		t.Fatalf("empty generated content must not create a work, got %d works", count)
+	}
+}
+
+func TestGenerateDraftKeepsContentWhenModelJSONIsTruncated(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupCreatorTestDB(t)
+	topic := models.Topic{ID: "partial-draft-topic", UserID: "writer", Title: "选题", CoreQuestion: "善良会让人贫穷吗？", TargetAudience: "普通职场人", Conclusion: "善良需要边界", DesiredAction: "建立边界", Status: "preparing"}
+	note := models.Note{ID: "partial-draft-note", UserID: topic.UserID, Title: "素材", ContentText: "老人坚持让顾客只买当天吃得完的菜。"}
+	config.DB.Create(&topic)
+	config.DB.Create(&note)
+
+	originalProvider := creatorDraftProvider
+	creatorDraftProvider = func(string) services.LLMProvider {
+		return &transformProvider{response: `{"title":"善良也要有边界","content":"先说结论：善良不会让一个人变穷，失去边界才会。老人坚持让顾客只买当天吃得完的菜，这件小事提醒我们`}
+	}
+	t.Cleanup(func() { creatorDraftProvider = originalProvider })
+
+	w := creatorRequest(http.MethodPost, "/creator-ai/draft", topic.UserID, map[string]any{
+		"topicId": topic.ID, "materialIds": []string{note.ID},
+	}, GenerateCreatorDraft)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("truncated JSON with content must still create a draft, got %d %s", w.Code, w.Body.String())
+	}
+	var response struct {
+		CitationStatus string      `json:"citationStatus"`
+		Work           models.Work `json:"work"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.CitationStatus != "unavailable" {
+		t.Fatalf("truncated JSON must disable citations, got %q", response.CitationStatus)
+	}
+	if !strings.Contains(response.Work.Content, "善良不会让一个人变穷") {
+		t.Fatalf("partial content was not kept: %q", response.Work.Content)
 	}
 }
 

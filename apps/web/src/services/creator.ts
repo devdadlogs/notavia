@@ -34,7 +34,7 @@ export interface Citation {
 
 export interface Work {
   id: string; topicId: string; parentId?: string; platform: Platform;
-  title: string; content: string; status: string; citations?: Citation[];
+  title: string; content: string; contentJson?: string; status: string; citations?: Citation[];
   publications?: Publication[]; updatedAt: string;
 }
 

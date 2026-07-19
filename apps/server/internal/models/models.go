@@ -155,13 +155,17 @@ type TopicIdea struct {
 }
 
 type Work struct {
-	ID           string        `json:"id" gorm:"primaryKey;type:varchar(36)"`
-	UserID       string        `json:"userId" gorm:"not null;index"`
-	TopicID      string        `json:"topicId" gorm:"not null;index"`
-	ParentID     *string       `json:"parentId" gorm:"index"`
-	Platform     string        `json:"platform" gorm:"not null;index"`
-	Title        string        `json:"title"`
-	Content      string        `json:"content" gorm:"type:text"`
+	ID       string  `json:"id" gorm:"primaryKey;type:varchar(36)"`
+	UserID   string  `json:"userId" gorm:"not null;index"`
+	TopicID  string  `json:"topicId" gorm:"not null;index"`
+	ParentID *string `json:"parentId" gorm:"index"`
+	Platform string  `json:"platform" gorm:"not null;index"`
+	Title    string  `json:"title"`
+	Content  string  `json:"content" gorm:"type:text"`
+	// ContentJSON keeps the editor document intact (tables, images and video
+	// nodes). Content remains the Markdown/plain-text representation used by
+	// search, AI prompts and exports.
+	ContentJSON  string        `json:"contentJson" gorm:"type:text"`
 	Status       string        `json:"status" gorm:"default:'draft';index"`
 	AIGenerated  string        `json:"aiGenerated" gorm:"type:text"`
 	CreatedAt    time.Time     `json:"createdAt" gorm:"autoCreateTime"`

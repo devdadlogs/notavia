@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { Editor } from '@tiptap/react';
 import {
-  Heading1, Heading2, Heading3, Heading4, Heading5, Heading6,
+  Heading1, Heading2, Heading3, Heading4, Heading5,
   List, ListOrdered, CheckSquare, Quote, Minus,
   Image as ImageIcon, Table as TableIcon, Code, Paperclip, Link,
   FileVideo, Music, Lock, Globe, Plus, Hash
@@ -191,6 +191,20 @@ export function BlockHoverControls({ editor }: BlockHoverControlsProps) {
     setHoverState(null);
   };
 
+  const openImagePicker = useCallback(() => {
+    if (!hoverState) return;
+    actionPosRef.current = hoverState.pos;
+    setIsMenuOpen(false);
+    imgInputRef.current?.click();
+  }, [hoverState]);
+
+  const openFilePicker = useCallback(() => {
+    if (!hoverState) return;
+    actionPosRef.current = hoverState.pos;
+    setIsMenuOpen(false);
+    fileInputRef.current?.click();
+  }, [hoverState]);
+
   if (!editor || (!hoverState && !linkDialog.open)) return null;
 
   const insertBlock = (action: () => void) => {
@@ -346,18 +360,10 @@ export function BlockHoverControls({ editor }: BlockHoverControlsProps) {
 
           <div style={{ height: '1px', background: 'var(--border-color)', margin: '8px 0' }} />
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)', padding: '4px 12px', fontWeight: 500 }}>通用</div>
-          {renderMenuItem(<ImageIcon size={15}/>, "图片", () => {
-             actionPosRef.current = hoverState!.pos;
-             setIsMenuOpen(false);
-             imgInputRef.current?.click();
-          })}
+          {renderMenuItem(<ImageIcon size={15}/>, "图片", openImagePicker)}
           {renderMenuItem(<TableIcon size={15}/>, "表格", () => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run())}
           {renderMenuItem(<Code size={15}/>, "代码块", () => editor.chain().focus().toggleCodeBlock().run())}
-          {renderMenuItem(<Paperclip size={15}/>, "文件", () => {
-             actionPosRef.current = hoverState!.pos;
-             setIsMenuOpen(false);
-             fileInputRef.current?.click();
-          })}
+          {renderMenuItem(<Paperclip size={15}/>, "文件", openFilePicker)}
           {renderMenuItem(<Link size={15}/>, "链接", () => {
              setIsMenuOpen(false);
              setLinkDialog({ open: true, text: '', url: '', pos: hoverState!.pos });

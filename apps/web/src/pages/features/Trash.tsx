@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Trash2, RotateCcw, XCircle, Menu } from 'lucide-react';
 import api from '../../services/api';
 import { useUIStore } from '../../stores/uiStore';
@@ -8,11 +8,7 @@ export default function Trash() {
   const [isLoading, setIsLoading] = useState(true);
   const toggleSidebar = useUIStore(state => state.toggleSidebar);
 
-  useEffect(() => {
-    loadTrash();
-  }, []);
-
-  const loadTrash = async () => {
+  const loadTrash = useCallback(async () => {
     setIsLoading(true);
     try {
       const { data } = await api.get('/notes?isTrashed=true');
@@ -22,7 +18,11 @@ export default function Trash() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadTrash();
+  }, [loadTrash]);
 
   const handleRestore = async (id: string) => {
     try {

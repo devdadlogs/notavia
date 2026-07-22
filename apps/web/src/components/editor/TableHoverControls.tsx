@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/react';
 import { CellSelection } from '@tiptap/pm/tables';
 import { Copy, GripVertical, Merge, Plus, Rows3, Scissors, Split, TableProperties, Trash2 } from 'lucide-react';
@@ -25,7 +25,7 @@ export function TableHoverControls({ editor }: TableHoverControlsProps) {
   const [selectionMenu, setSelectionMenu] = useState<{ top: number; left: number } | null>(null);
   const hideTimer = useRef<number | null>(null);
 
-  const refreshTable = (next: HTMLTableElement | null) => {
+  const refreshTable = useCallback((next: HTMLTableElement | null) => {
     if (table && table !== next) table.classList.remove('table-hovered');
     if (next) {
       next.classList.add('table-hovered');
@@ -36,7 +36,7 @@ export function TableHoverControls({ editor }: TableHoverControlsProps) {
       setTableRect(null);
       setHover(null);
     }
-  };
+  }, [table]);
 
   useEffect(() => {
     if (!editor) return;
@@ -100,7 +100,7 @@ export function TableHoverControls({ editor }: TableHoverControlsProps) {
       document.removeEventListener('mousedown', closeMenu);
       window.removeEventListener('scroll', clearOnScroll, true);
     };
-  }, [editor, menuOpen, table]);
+  }, [editor, menuOpen, table, refreshTable]);
 
   useEffect(() => {
     if (!editor) return;

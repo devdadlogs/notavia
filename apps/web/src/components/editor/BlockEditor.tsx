@@ -28,25 +28,6 @@ export default function BlockEditor({ noteId }: BlockEditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
-  // Load Note
-  useEffect(() => {
-    const loadNote = async () => {
-      try {
-        const { data } = await api.get(`/notes/${noteId}`);
-        setNoteData(data);
-        setTitle(data.title === 'Untitled' ? '' : data.title);
-        setCoverImage(data.coverImage);
-        setIcon(data.icon);
-        if (editor && !editor.isDestroyed) {
-          editor.commands.setContent(data.contentJson || '');
-        }
-      } catch (error) {
-        console.error('Failed to load note', error);
-      }
-    };
-    if (noteId) loadNote();
-  }, [noteId]);
-
   const saveNote = useCallback(async (newTitle: string, contentJson: any, contentText: string, newCover: string | null, newIcon: string | null) => {
     setIsSaving(true);
     try {
@@ -96,6 +77,26 @@ export default function BlockEditor({ noteId }: BlockEditorProps) {
       }
     }
   });
+
+  useEffect(() => {
+    if (!noteId || !editor) return;
+    let cancelled = false;
+    const loadNote = async () => {
+      try {
+        const { data } = await api.get(`/notes/${noteId}`);
+        if (cancelled) return;
+        setNoteData(data);
+        setTitle(data.title === 'Untitled' ? '' : data.title);
+        setCoverImage(data.coverImage);
+        setIcon(data.icon);
+        if (!editor.isDestroyed) editor.commands.setContent(data.contentJson || '');
+      } catch (error) {
+        if (!cancelled) console.error('Failed to load note', error);
+      }
+    };
+    void loadNote();
+    return () => { cancelled = true; };
+  }, [noteId, editor]);
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTitle = e.target.value;

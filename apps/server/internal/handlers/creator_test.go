@@ -483,6 +483,71 @@ func (p *topicSuggestionProvider) GenerateStream(string, chan<- string, chan<- e
 func (p *topicSuggestionProvider) Embed(string) ([]float32, error)                    { return nil, nil }
 func (p *topicSuggestionProvider) TranscribeAudio(string) (string, error)             { return "", nil }
 
+func TestCreatorSeedQuestionsRequireThreeActionableQuestions(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupCreatorTestDB(t)
+	originalProvider := creatorSeedProvider
+	creatorSeedProvider = func(string) services.LLMProvider {
+		return &transformProvider{response: `{"questions":["当时具体发生了什么？","哪一个细节让你一直记得？","这件事后来改变了你什么看法？"]}`}
+	}
+	t.Cleanup(func() { creatorSeedProvider = originalProvider })
+
+	w := creatorRequest(http.MethodPost, "/creator-ai/seed-questions", "writer", map[string]string{
+		"prompt": "今天在地铁上看到一位老人把座位让给带孩子的妈妈，我很受触动。",
+	}, SuggestCreatorSeedQuestions)
+	if w.Code != http.StatusOK {
+		t.Fatalf("suggest creator seed questions: %d %s", w.Code, w.Body.String())
+	}
+	var output creatorSeedQuestionOutput
+	if err := json.Unmarshal(w.Body.Bytes(), &output); err != nil {
+		t.Fatal(err)
+	}
+	if len(output.Questions) != 3 || output.Questions[0] == "" {
+		t.Fatalf("expected three questions, got %#v", output)
+	}
+}
+
+func TestCreateCreatorSeedRejectsIncompleteAnswers(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupCreatorTestDB(t)
+	w := creatorRequest(http.MethodPost, "/creator-ai/seed", "writer", map[string]any{
+		"prompt":  "我想写一次工作上的挫折。",
+		"answers": []map[string]string{{"question": "发生了什么", "answer": "我被否定了"}},
+	}, CreateCreatorSeed)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("incomplete seed answers must be rejected, got %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestCreateCreatorSeedReturnsReusableContent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupCreatorTestDB(t)
+	originalProvider := creatorSeedProvider
+	creatorSeedProvider = func(string) services.LLMProvider {
+		return &transformProvider{response: `{"title":"一次被否定后的反思","experience":"会上我的方案被否定，我一开始很难接受。后来复盘发现，问题不在能力，而在没有提前对齐目标。","viewpoint":"被否定并不等于自己不行，先看清问题才有用。","coreQuestion":"工作中被否定后，怎么避免把一次结果当成自我否定？","targetAudience":"刚进入管理或承担重要项目的职场人","conclusion":"先复盘事实和目标，再决定要不要调整自己。","desiredAction":"下次被否定时，先写下事实和分歧。"}`}
+	}
+	t.Cleanup(func() { creatorSeedProvider = originalProvider })
+
+	w := creatorRequest(http.MethodPost, "/creator-ai/seed", "writer", map[string]any{
+		"prompt": "我想写一次工作上的挫折。",
+		"answers": []map[string]string{
+			{"question": "发生了什么", "answer": "会上我的方案被否定了。"},
+			{"question": "哪个细节最难忘", "answer": "对方说我没有理解真实目标。"},
+			{"question": "后来有什么变化", "answer": "我开始先对齐目标再动手。"},
+		},
+	}, CreateCreatorSeed)
+	if w.Code != http.StatusOK {
+		t.Fatalf("create creator seed: %d %s", w.Code, w.Body.String())
+	}
+	var output creatorSeedOutput
+	if err := json.Unmarshal(w.Body.Bytes(), &output); err != nil {
+		t.Fatal(err)
+	}
+	if output.Title == "" || output.Experience == "" || output.CoreQuestion == "" || output.Conclusion == "" {
+		t.Fatalf("expected complete creator seed, got %#v", output)
+	}
+}
+
 func TestSuggestTopicBriefUsesOwnedTopicContext(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	setupCreatorTestDB(t)

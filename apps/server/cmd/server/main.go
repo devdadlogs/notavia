@@ -178,6 +178,8 @@ func main() {
 		creatorAI := protected.Group("/creator-ai")
 		{
 			creatorAI.POST("/retrieve", handlers.RetrieveCreatorMaterials)
+			creatorAI.POST("/seed-questions", handlers.SuggestCreatorSeedQuestions)
+			creatorAI.POST("/seed", handlers.CreateCreatorSeed)
 			creatorAI.POST("/insights", handlers.ExtractMaterialInsights)
 			creatorAI.GET("/insights/:noteId/status", handlers.GetMaterialInsightStatus)
 			creatorAI.POST("/topic-brief", handlers.SuggestTopicBrief)

@@ -159,18 +159,18 @@ export default function CreatorDashboard() {
         </div>
         <div className="capture-meta">
           <span>自动保留标题、正文和原始链接</span>
-          <button onClick={() => navigate("/materials")}>
-            <FilePlus2 size={14} /> 也可以手写、录音或导入文件
-          </button>
+          <div className="capture-actions">
+            <CreativeSeedStarter compact />
+            <button onClick={() => navigate("/materials")}>
+              <FilePlus2 size={14} /> 也可以手写、录音或导入文件
+            </button>
+          </div>
         </div>
         {clipError && <div className="capture-error">{clipError}</div>}
         <button className="hero-topic-action" onClick={() => setCreating(true)}>
           <Lightbulb size={16} /> 我已经有选题了
         </button>
       </header>
-      {loaded && topics.length === 0 && recentMaterials.length === 0 && (
-        <CreativeSeedStarter />
-      )}
       {loaded && topics.length === 0 && recentMaterials.length === 0 && (
         <section className="getting-started">
           <div>

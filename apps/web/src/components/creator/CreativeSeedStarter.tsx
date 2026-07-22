@@ -47,7 +47,13 @@ function toDocumentJSON(content: string) {
   });
 }
 
-export default function CreativeSeedStarter() {
+type CreativeSeedStarterProps = {
+  compact?: boolean;
+};
+
+export default function CreativeSeedStarter({
+  compact = false,
+}: CreativeSeedStarterProps) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<Step>("start");
@@ -181,16 +187,26 @@ export default function CreativeSeedStarter() {
 
   return (
     <>
-      <section className="creator-zero-state">
-        <div>
-          <span>还没有素材或选题也没关系</span>
-          <h2>从你最近想说的一件事开始。</h2>
-          <p>说几句真实经历或困惑，AI 用三个问题帮你找到值得写的内容。</p>
-        </div>
-        <button onClick={() => setOpen(true)}>
-          <MessageCircle size={17} /> 从零开始聊一聊 <ArrowRight size={16} />
+      {compact ? (
+        <button
+          type="button"
+          className="capture-seed-action"
+          onClick={() => setOpen(true)}
+        >
+          <MessageCircle size={14} /> 还没有想法？从一个念头开始
         </button>
-      </section>
+      ) : (
+        <section className="creator-zero-state">
+          <div>
+            <span>还没有素材或选题也没关系</span>
+            <h2>从你最近想说的一件事开始。</h2>
+            <p>说几句真实经历或困惑，AI 用三个问题帮你找到值得写的内容。</p>
+          </div>
+          <button onClick={() => setOpen(true)}>
+            <MessageCircle size={17} /> 从零开始聊一聊 <ArrowRight size={16} />
+          </button>
+        </section>
+      )}
 
       {open && (
         <div

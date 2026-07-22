@@ -1,11 +1,16 @@
-import { Node, mergeAttributes } from '@tiptap/core';
+import { Node, mergeAttributes } from "@tiptap/core";
+
+type HtmlAttributes = Record<
+  string,
+  string | number | boolean | null | undefined
+>;
 
 export interface AudioOptions {
   inline: boolean;
-  HTMLAttributes: Record<string, any>;
+  HTMLAttributes: HtmlAttributes;
 }
 
-declare module '@tiptap/core' {
+declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     audio: {
       setAudio: (options: { src: string }) => ReturnType;
@@ -14,7 +19,7 @@ declare module '@tiptap/core' {
 }
 
 export const Audio = Node.create<AudioOptions>({
-  name: 'audio',
+  name: "audio",
 
   addOptions() {
     return {
@@ -30,7 +35,7 @@ export const Audio = Node.create<AudioOptions>({
   },
 
   group() {
-    return this.options.inline ? 'inline' : 'block';
+    return this.options.inline ? "inline" : "block";
   },
 
   draggable: true,
@@ -46,13 +51,16 @@ export const Audio = Node.create<AudioOptions>({
   parseHTML() {
     return [
       {
-        tag: 'audio[src]',
+        tag: "audio[src]",
       },
     ];
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ['audio', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes)];
+    return [
+      "audio",
+      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),
+    ];
   },
 
   addCommands() {

@@ -1,11 +1,16 @@
-import { Node, mergeAttributes } from '@tiptap/core';
+import { Node, mergeAttributes } from "@tiptap/core";
+
+type HtmlAttributes = Record<
+  string,
+  string | number | boolean | null | undefined
+>;
 
 export interface VideoOptions {
   inline: boolean;
-  HTMLAttributes: Record<string, any>;
+  HTMLAttributes: HtmlAttributes;
 }
 
-declare module '@tiptap/core' {
+declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     video: {
       setVideo: (options: { src: string }) => ReturnType;
@@ -14,7 +19,7 @@ declare module '@tiptap/core' {
 }
 
 export const Video = Node.create<VideoOptions>({
-  name: 'video',
+  name: "video",
 
   addOptions() {
     return {
@@ -30,7 +35,7 @@ export const Video = Node.create<VideoOptions>({
   },
 
   group() {
-    return this.options.inline ? 'inline' : 'block';
+    return this.options.inline ? "inline" : "block";
   },
 
   draggable: true,
@@ -46,13 +51,16 @@ export const Video = Node.create<VideoOptions>({
   parseHTML() {
     return [
       {
-        tag: 'video[src]',
+        tag: "video[src]",
       },
     ];
   },
 
   renderHTML({ HTMLAttributes }) {
-    return ['video', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes)];
+    return [
+      "video",
+      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),
+    ];
   },
 
   addCommands() {

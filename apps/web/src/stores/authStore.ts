@@ -1,5 +1,5 @@
-import { create } from 'zustand';
-import api from '../services/api';
+import { create } from "zustand";
+import api from "../services/api";
 
 interface User {
   id: string;
@@ -36,22 +36,23 @@ export const useAuthStore = create<AuthState>((set) => ({
   checkAuth: async () => {
     try {
       set({ isLoading: true });
-      const { data } = await api.get('/auth/me');
+      const { data } = await api.get("/auth/me");
       set({ user: data.user, isAuthenticated: true, isLoading: false });
-    } catch (error) {
+    } catch {
       set({ user: null, isAuthenticated: false, isLoading: false });
     }
   },
 
   logout: async () => {
     try {
-      await api.post('/auth/logout');
+      await api.post("/auth/logout");
     } finally {
       set({ user: null, isAuthenticated: false });
     }
   },
 
-  updateUser: (data) => set((state) => ({
-    user: state.user ? { ...state.user, ...data } : null
-  }))
+  updateUser: (data) =>
+    set((state) => ({
+      user: state.user ? { ...state.user, ...data } : null,
+    })),
 }));

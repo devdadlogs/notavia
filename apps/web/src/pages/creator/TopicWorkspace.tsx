@@ -66,6 +66,7 @@ import {
   type MarkdownToolbarAction,
 } from "../../utils/markdownToolbar";
 import { errorMessage } from "../../utils/errors";
+import "../../styles/editor.css";
 
 const statuses = [
   ["idea", "想法"],

@@ -19,6 +19,7 @@ import { ChevronLeft, Play, FastForward, Sparkles, Menu, Pause, Mic, Trash2 } fr
 import { useUIStore } from '../../stores/uiStore';
 import AIPanel from '../../components/editor/AIPanel';
 import MaterialWorkbench from '../../components/editor/MaterialWorkbench';
+import type { Material } from '../../services/creator';
 
 // Yjs Imports
 import * as Y from 'yjs';
@@ -28,22 +29,26 @@ import Collaboration from '@tiptap/extension-collaboration';
 
 import '../../styles/editor.css';
 
+type NoteTag = { id?: string; tagId?: string; name?: string; tag?: { id: string; name: string } };
+type NoteDetailData = Material & { createdAt: string; contentJson?: unknown; tags?: NoteTag[] };
+type AudioContextConstructor = typeof AudioContext & { new (): AudioContext };
+
 export default function NoteDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toggleSidebar = useUIStore(state => state.toggleSidebar);
   const [isSaving, setIsSaving] = useState(false);
-  const [noteData, setNoteData] = useState<any>(null);
+  const [noteData, setNoteData] = useState<NoteDetailData | null>(null);
   const [isAddingTag, setIsAddingTag] = useState(false);
 
   const handleAddTag = async (tagName: string) => {
     try {
       const { data } = await api.post(`/notes/${id}/tags`, { name: tagName });
       // Update local state without waiting for full reload
-      setNoteData((prev: any) => ({
+      setNoteData(prev => prev ? {
         ...prev,
-        tags: [...(prev?.tags || []), { tag: data, tagId: data.id }]
-      }));
+        tags: [...(prev.tags || []), { tag: data, tagId: data.id }]
+      } : prev);
     } catch (err) {
       console.error('Failed to add tag', err);
     }
@@ -52,10 +57,10 @@ export default function NoteDetail() {
   const removeTag = async (tagId: string) => {
     try {
       await api.delete(`/notes/${id}/tags/${tagId}`);
-      setNoteData((prev: any) => ({
+      setNoteData(prev => prev ? {
         ...prev,
-        tags: prev?.tags?.filter((t: any) => (t.tagId || t.id) !== tagId) || []
-      }));
+        tags: prev.tags?.filter(tag => (tag.tagId || tag.id) !== tagId) || []
+      } : prev);
     } catch (err) {
       console.error('Failed to remove tag', err);
     }
@@ -101,7 +106,9 @@ export default function NoteDetail() {
       };
 
       // Set up AudioContext for real-time visualization
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const AudioContextClass = window.AudioContext || (window as Window & { webkitAudioContext?: AudioContextConstructor }).webkitAudioContext;
+      if (!AudioContextClass) throw new Error('当前浏览器不支持录音');
+      const audioContext = new AudioContextClass();
       audioContextRef.current = audioContext;
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 256;
@@ -138,7 +145,7 @@ export default function NoteDetail() {
           const { data } = await api.post(`/notes/${id}/audio`, formData, {
             headers: { 'Content-Type': 'multipart/form-data' }
           });
-          setNoteData((prev: any) => prev ? { ...prev, audioUrl: data.audioUrl } : null);
+          setNoteData(prev => prev ? { ...prev, audioUrl: data.audioUrl } : null);
         } catch (err) {
           console.error('Audio upload failed', err);
         }
@@ -258,7 +265,7 @@ export default function NoteDetail() {
     };
   }, [id, ydoc]);
 
-  const saveNote = useCallback(async (newTitle: string, contentJson: any, contentText: string) => {
+  const saveNote = useCallback(async (newTitle: string, contentJson: unknown, contentText: string) => {
     setIsSaving(true);
     try {
       await api.put(`/notes/${id}`, {
@@ -273,7 +280,7 @@ export default function NoteDetail() {
     }
   }, [id]);
 
-  const saveNoteContent = useCallback(async (contentJson: any, contentText: string) => {
+  const saveNoteContent = useCallback(async (contentJson: unknown, contentText: string) => {
     setIsSaving(true);
     try {
       await api.put(`/notes/${id}`, {
@@ -568,11 +575,11 @@ export default function NoteDetail() {
             {/* Sync State Indicator (Moved to top right header) */}
           </div>
           <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap', alignItems: 'center' }}>
-            {noteData?.tags?.map((t: any) => (
+            {noteData?.tags?.map(t => (
               <span key={t.tagId || t.id} className="note-tag" style={{ gap: '6px' }}>
                 {t.tag?.name || t.name || '标签'}
                 <button 
-                  onClick={(e) => { e.stopPropagation(); removeTag(t.tagId || t.id); }} 
+                  onClick={(e) => { const tagId = t.tagId || t.id; if (tagId) { e.stopPropagation(); void removeTag(tagId); } }}
                   style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -710,7 +717,7 @@ export default function NoteDetail() {
           note={noteData}
           editor={editor}
           title={title}
-          onNoteChange={(patch) => setNoteData((current: any) => ({ ...current, ...patch }))}
+          onNoteChange={(patch) => setNoteData(current => current ? { ...current, ...patch } : current)}
         />}
       </main>
 

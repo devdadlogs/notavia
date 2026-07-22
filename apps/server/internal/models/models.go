@@ -135,6 +135,7 @@ type MaterialIdea struct {
 	ID            string              `json:"id" gorm:"primaryKey;type:varchar(36)"`
 	UserID        string              `json:"userId" gorm:"not null;index"`
 	NoteID        string              `json:"noteId" gorm:"not null;index"`
+	SourceTitle   string              `json:"sourceTitle,omitempty" gorm:"-"`
 	Content       string              `json:"content" gorm:"type:text;not null"`
 	SourceExcerpt string              `json:"sourceExcerpt" gorm:"type:text"`
 	CreatedAt     time.Time           `json:"createdAt" gorm:"autoCreateTime"`

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/react';
 import { EditorContent } from '@tiptap/react';
 import { AlertCircle, Check, ExternalLink, FilePlus2, FolderPlus, Highlighter, Loader2, Pencil, Quote, Sparkles, Trash2 } from 'lucide-react';
@@ -49,6 +49,7 @@ export default function MaterialWorkbench({ note, editor, title, onNoteChange }:
   const [selectedTopic, setSelectedTopic] = useState('');
   const [newTopicTitle, setNewTopicTitle] = useState(title);
   const [showNewTopic, setShowNewTopic] = useState(false);
+  const ideaInputRef = useRef<HTMLTextAreaElement>(null);
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
 
@@ -203,6 +204,11 @@ export default function MaterialWorkbench({ note, editor, title, onNoteChange }:
   const isWeb = note.sourceType === 'web' && Boolean(note.sourceHtml);
   const hasAudio = Boolean(note.audioUrl);
   const status = note.materialStatus || 'inbox';
+  const nextAction = !insights.length
+    ? { title: '先判断这条素材值不值得留下', detail: 'AI 会提取可写角度、事实风险和可复用案例。', label: 'AI 提炼素材', onClick: extractInsights }
+    : !ideas.length
+      ? { title: '把素材变成你的判断', detail: '写下你同意、反对或想追问的话，才能形成个人观点卡。', label: '写下我的判断', onClick: () => ideaInputRef.current?.focus() }
+      : { title: '把判断带进一个选题', detail: '选题会同时保留来源素材和你的立场，方便生成时核对。', label: '创建选题', onClick: () => setShowNewTopic(true) };
 
   return <div className="material-workbench">
     <section className="material-source-pane">
@@ -233,10 +239,10 @@ export default function MaterialWorkbench({ note, editor, title, onNoteChange }:
         </section>
 
         <section className="material-panel-section">
-          <div className="material-section-title"><strong>我的想法</strong><small>{ideas.length ? `${ideas.length} 条` : '真正属于你的内容'}</small></div>
+          <div className="material-section-title"><strong>观点卡</strong><small>{ideas.length ? `${ideas.length} 条可复用判断` : '真正属于你的内容'}</small></div>
           <button className="material-capture-selection" onClick={captureSelection}><Highlighter size={14}/>摘录左侧选中文字</button>
           {sourceExcerpt && <div className="material-idea-excerpt-draft"><Quote size={13}/><span>{sourceExcerpt}</span><button onClick={() => setSourceExcerpt('')}>移除</button></div>}
-          <textarea value={ideaContent} onChange={event => setIdeaContent(event.target.value)} placeholder="这条素材让我想到什么？我同意什么，又反对什么？" />
+          <textarea ref={ideaInputRef} value={ideaContent} onChange={event => setIdeaContent(event.target.value)} placeholder="这条素材让我想到什么？我同意什么，又反对什么？" />
           <div className="material-note-save-row">
             <button type="button" className="material-save-note" onClick={saveIdea} disabled={busy === 'idea-save' || !ideaContent.trim()}>{busy === 'idea-save' ? <><Loader2 className="spin" size={14}/>保存中…</> : editingIdea ? '更新想法' : '添加想法'}</button>
             {editingIdea && <button className="material-idea-cancel" onClick={() => { setEditingIdea(null); setIdeaContent(''); setSourceExcerpt(''); }}>取消编辑</button>}
@@ -259,8 +265,9 @@ export default function MaterialWorkbench({ note, editor, title, onNoteChange }:
         </section>
 
         <section className="material-panel-section material-next-step">
-          <div className="material-section-title"><strong>下一步</strong><small>让素材进入创作</small></div>
-          <label>加入已有选题</label>
+          <div className="material-section-title"><strong>下一步</strong><small>每条素材先做一件最有价值的事</small></div>
+          <div className="material-recommended-next"><strong>{nextAction.title}</strong><p>{nextAction.detail}</p><button onClick={nextAction.onClick} disabled={insightStatus === 'processing'}>{insightStatus === 'processing' && !insights.length ? <Loader2 className="spin" size={14}/> : null}{insightStatus === 'processing' && !insights.length ? '后台提炼中' : nextAction.label}</button></div>
+          <label>已经有选题？直接加入</label>
           <div className="material-topic-select material-topic-select-wide"><select value={selectedTopic} onChange={event => setSelectedTopic(event.target.value)}><option value="">选择一个选题</option>{topics.filter(topic => topic.status !== 'archived').map(topic => <option key={topic.id} value={topic.id}>{topic.title}</option>)}</select><button onClick={() => void addToTopic(selectedTopic)} disabled={!selectedTopic || busy === 'topic'}>{busy === 'topic' ? <Loader2 className="spin" size={14}/> : null}加入并打开选题</button></div>
           {showNewTopic ? <div className="material-new-topic"><input autoFocus value={newTopicTitle} onChange={event => setNewTopicTitle(event.target.value)} placeholder="选题名称"/><div><button onClick={() => setShowNewTopic(false)}>取消</button><button onClick={createTopic} disabled={busy === 'topic'}><Check size={14}/>创建并继续</button></div></div> : <button className="material-action-secondary" onClick={() => setShowNewTopic(true)}><FilePlus2 size={15}/>从这条素材创建选题</button>}
           <button className="material-action-quiet" onClick={markForLater} disabled={busy === 'later'}><FolderPlus size={15}/>暂时收好，稍后处理</button>

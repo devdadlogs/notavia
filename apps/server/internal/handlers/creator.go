@@ -114,6 +114,96 @@ func GetTopic(c *gin.Context) {
 	c.JSON(200, t)
 }
 
+type coverageItem struct {
+	NoteID  string `json:"noteId"`
+	Title   string `json:"title"`
+	Content string `json:"content"`
+}
+
+type coverageGap struct {
+	Key      string `json:"key"`
+	Label    string `json:"label"`
+	Message  string `json:"message"`
+	Required bool   `json:"required"`
+}
+
+// topicCoverage deliberately reports evidence inventory rather than a made-up
+// "truth score". It tells the creator what the current topic can cite, which
+// facts need checking, and which decisions are still missing before drafting.
+type topicCoverage struct {
+	MaterialCount     int            `json:"materialCount"`
+	ViewpointCount    int            `json:"viewpointCount"`
+	FactCount         int            `json:"factCount"`
+	VerificationItems []coverageItem `json:"verificationItems"`
+	Gaps              []coverageGap  `json:"gaps"`
+	ReadyForDraft     bool           `json:"readyForDraft"`
+}
+
+func GetTopicCoverage(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	var topic models.Topic
+	if err := config.DB.Where("id = ? AND user_id = ?", c.Param("id"), userID).
+		Preload("Materials.Note").Preload("Ideas.Idea").First(&topic).Error; err != nil {
+		c.JSON(404, gin.H{"error": "topic not found"})
+		return
+	}
+
+	coverage := topicCoverage{
+		MaterialCount:     len(topic.Materials),
+		ViewpointCount:    len(topic.Ideas),
+		VerificationItems: []coverageItem{},
+		Gaps:              []coverageGap{},
+	}
+	noteIDs := make([]string, 0, len(topic.Materials))
+	noteTitles := make(map[string]string, len(topic.Materials))
+	for _, material := range topic.Materials {
+		noteIDs = append(noteIDs, material.NoteID)
+		noteTitles[material.NoteID] = material.Note.Title
+	}
+	if len(noteIDs) > 0 {
+		var insights []models.MaterialInsight
+		if err := config.DB.Where("user_id = ? AND note_id IN ?", userID, noteIDs).Find(&insights).Error; err != nil {
+			c.JSON(500, gin.H{"error": "failed to load topic coverage"})
+			return
+		}
+		for _, insight := range insights {
+			switch insight.Type {
+			case "fact":
+				coverage.FactCount++
+			case "verify":
+				coverage.VerificationItems = append(coverage.VerificationItems, coverageItem{NoteID: insight.NoteID, Title: noteTitles[insight.NoteID], Content: insight.Content})
+			}
+		}
+	}
+
+	if coverage.MaterialCount == 0 {
+		coverage.Gaps = append(coverage.Gaps, coverageGap{Key: "sources", Label: "还没有选择来源素材", Message: "先加入至少一条能回看的素材，草稿才有可核对的依据。", Required: true})
+	}
+	if coverage.ViewpointCount == 0 {
+		coverage.Gaps = append(coverage.Gaps, coverageGap{Key: "viewpoint", Label: "还没有写下你的判断", Message: "先写一句你真正同意、反对或想追问的话，文章才会有你的立场。", Required: false})
+	}
+	for _, field := range []struct {
+		key, label, message, value string
+	}{
+		{"coreQuestion", "核心问题还没写清", "用一个具体矛盾或疑问，决定文章真正要回答什么。", topic.CoreQuestion},
+		{"targetAudience", "目标读者还没写清", "写下读者所处的真实情境，避免把文章写给所有人。", topic.TargetAudience},
+		{"conclusion", "明确结论还没写清", "先写你相信的答案，AI 才不会把文章写成两边都不得罪的总结。", topic.Conclusion},
+		{"desiredAction", "读完后的收获还没写清", "明确读者只带走的一件事，文章才知道该在哪里收束。", topic.DesiredAction},
+	} {
+		if strings.TrimSpace(field.value) == "" {
+			coverage.Gaps = append(coverage.Gaps, coverageGap{Key: field.key, Label: field.label, Message: field.message, Required: true})
+		}
+	}
+	coverage.ReadyForDraft = true
+	for _, gap := range coverage.Gaps {
+		if gap.Required {
+			coverage.ReadyForDraft = false
+			break
+		}
+	}
+	c.JSON(200, coverage)
+}
+
 func UpdateTopic(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	var t models.Topic

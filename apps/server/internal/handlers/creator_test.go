@@ -144,6 +144,78 @@ func TestMaterialIdeasCanBeCreatedAndListed(t *testing.T) {
 	}
 }
 
+func TestListAllMaterialIdeasKeepsUsersIsolatedAndReturnsTopicLinks(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupCreatorTestDB(t)
+	ownerNote := models.Note{ID: "ideas-owner-note", UserID: "owner", Title: "我的素材"}
+	otherNote := models.Note{ID: "ideas-other-note", UserID: "other", Title: "别人的素材"}
+	ownerIdea := models.MaterialIdea{ID: "ideas-owner", UserID: ownerNote.UserID, NoteID: ownerNote.ID, Content: "我的长期判断"}
+	otherIdea := models.MaterialIdea{ID: "ideas-other", UserID: otherNote.UserID, NoteID: otherNote.ID, Content: "不该泄露的判断"}
+	topic := models.Topic{ID: "ideas-topic", UserID: ownerNote.UserID, Title: "已采用的选题", Status: "preparing"}
+	config.DB.Create(&ownerNote)
+	config.DB.Create(&otherNote)
+	config.DB.Create(&ownerIdea)
+	config.DB.Create(&otherIdea)
+	config.DB.Create(&topic)
+	config.DB.Create(&models.TopicIdea{TopicID: topic.ID, IdeaID: ownerIdea.ID})
+
+	w := creatorRequest(http.MethodGet, "/materials/ideas", ownerNote.UserID, nil, ListAllMaterialIdeas)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list all ideas: %d %s", w.Code, w.Body.String())
+	}
+	var ideas []models.MaterialIdea
+	if err := json.Unmarshal(w.Body.Bytes(), &ideas); err != nil {
+		t.Fatal(err)
+	}
+	if len(ideas) != 1 || ideas[0].ID != ownerIdea.ID {
+		t.Fatalf("ideas must be scoped to owner: %#v", ideas)
+	}
+	if ideas[0].SourceTitle != ownerNote.Title {
+		t.Fatalf("global idea list must include source title: %#v", ideas[0])
+	}
+	if len(ideas[0].TopicLinks) != 1 || ideas[0].TopicLinks[0].Title != topic.Title {
+		t.Fatalf("global idea list must include topic links: %#v", ideas[0])
+	}
+}
+
+func TestTopicCoverageSummarizesEvidenceAndGaps(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupCreatorTestDB(t)
+	topic := models.Topic{ID: "coverage-topic", UserID: "writer", Title: "完整选题", CoreQuestion: "为什么值得写？", TargetAudience: "普通创作者", Conclusion: "先有判断再写作", DesiredAction: "写下自己的结论", Status: "preparing"}
+	note := models.Note{ID: "coverage-note", UserID: topic.UserID, Title: "来源素材", ContentText: "可以核对的原文"}
+	idea := models.MaterialIdea{ID: "coverage-idea", UserID: topic.UserID, NoteID: note.ID, Content: "这是我的判断"}
+	config.DB.Create(&topic)
+	config.DB.Create(&note)
+	config.DB.Create(&idea)
+	config.DB.Create(&models.TopicMaterial{TopicID: topic.ID, NoteID: note.ID})
+	config.DB.Create(&models.TopicIdea{TopicID: topic.ID, IdeaID: idea.ID})
+	config.DB.Create(&models.MaterialInsight{ID: "coverage-fact", UserID: topic.UserID, NoteID: note.ID, Type: "fact", Content: "一项关键事实"})
+	config.DB.Create(&models.MaterialInsight{ID: "coverage-verify", UserID: topic.UserID, NoteID: note.ID, Type: "verify", Content: "发布前确认时间"})
+
+	w := creatorRequest(http.MethodGet, "/topics/coverage-topic", topic.UserID, nil, GetTopicCoverage)
+	if w.Code != http.StatusOK {
+		t.Fatalf("topic coverage: %d %s", w.Code, w.Body.String())
+	}
+	var coverage topicCoverage
+	if err := json.Unmarshal(w.Body.Bytes(), &coverage); err != nil {
+		t.Fatal(err)
+	}
+	if coverage.MaterialCount != 1 || coverage.ViewpointCount != 1 || coverage.FactCount != 1 {
+		t.Fatalf("unexpected coverage counts: %#v", coverage)
+	}
+	if len(coverage.VerificationItems) != 1 || coverage.VerificationItems[0].Title != note.Title {
+		t.Fatalf("verification item is missing source context: %#v", coverage.VerificationItems)
+	}
+	if len(coverage.Gaps) != 0 {
+		t.Fatalf("complete topic should not have required gaps: %#v", coverage.Gaps)
+	}
+
+	w = creatorRequest(http.MethodGet, "/topics/coverage-topic", "other-user", nil, GetTopicCoverage)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("other user must not read coverage: %d %s", w.Code, w.Body.String())
+	}
+}
+
 func TestMaterialIdeasCanOnlyBeChangedByTheirOwner(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	setupCreatorTestDB(t)

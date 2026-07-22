@@ -145,6 +145,7 @@ func main() {
 		materials := protected.Group("/materials")
 		{
 			materials.GET("", handlers.ListMaterials)
+			materials.GET("/ideas", handlers.ListAllMaterialIdeas)
 			materials.PUT("/:id/source", handlers.UpdateMaterialSource)
 			materials.GET("/:id/ideas", handlers.ListMaterialIdeas)
 			materials.POST("/:id/ideas", handlers.CreateMaterialIdea)
@@ -157,6 +158,7 @@ func main() {
 			topics.POST("", handlers.CreateTopic)
 			topics.GET("", handlers.ListTopics)
 			topics.GET("/:id", handlers.GetTopic)
+			topics.GET("/:id/coverage", handlers.GetTopicCoverage)
 			topics.PUT("/:id", handlers.UpdateTopic)
 			topics.DELETE("/:id", handlers.DeleteTopic)
 			topics.POST("/:id/materials", handlers.AddTopicMaterial)

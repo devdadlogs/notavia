@@ -11,7 +11,7 @@ export interface Material {
 }
 
 export interface MaterialIdea {
-  id: string; noteId: string; content: string; sourceExcerpt?: string;
+  id: string; noteId: string; sourceTitle?: string; content: string; sourceExcerpt?: string;
   createdAt: string; updatedAt: string; topicLinks?: Array<{ topicId: string; title: string }>;
 }
 
@@ -51,6 +51,28 @@ export interface TopicBriefSuggestion {
   conclusion: string; desiredAction: string; reason: string;
 }
 
+export interface TopicCoverageItem {
+  noteId: string;
+  title: string;
+  content: string;
+}
+
+export interface TopicCoverageGap {
+  key: string;
+  label: string;
+  message: string;
+  required: boolean;
+}
+
+export interface TopicCoverage {
+  materialCount: number;
+  viewpointCount: number;
+  factCount: number;
+  verificationItems: TopicCoverageItem[];
+  gaps: TopicCoverageGap[];
+  readyForDraft: boolean;
+}
+
 export interface Publication {
   id: string; workId: string; platform: string; url: string; publishedAt: string;
   views: number; likes: number; favorites: number; comments: number; notes: string;
@@ -70,6 +92,9 @@ export const creatorService = {
   addMaterial: async (topicId: string, noteId: string) => (await api.post(`/topics/${topicId}/materials`, { noteId })).data,
   removeMaterial: async (topicId: string, noteId: string) => api.delete(`/topics/${topicId}/materials/${noteId}`),
   listIdeas: async (noteId: string) => (await api.get<MaterialIdea[]>(`/materials/${noteId}/ideas`)).data,
+  listAllIdeas: async (limit?: number) => (
+    await api.get<MaterialIdea[]>('/materials/ideas', { params: limit ? { limit } : undefined })
+  ).data,
   createIdea: async (noteId: string, payload: Pick<MaterialIdea, 'content' | 'sourceExcerpt'>) => (await api.post<MaterialIdea>(`/materials/${noteId}/ideas`, payload)).data,
   updateIdea: async (noteId: string, ideaId: string, payload: Pick<MaterialIdea, 'content' | 'sourceExcerpt'>) => (await api.put<MaterialIdea>(`/materials/${noteId}/ideas/${ideaId}`, payload)).data,
   deleteIdea: async (noteId: string, ideaId: string) => api.delete(`/materials/${noteId}/ideas/${ideaId}`),
@@ -79,6 +104,7 @@ export const creatorService = {
   retrieve: async (query: string) => (await api.post('/creator-ai/retrieve', { query, limit: 12 })).data.results,
   extractInsights: async (noteId: string) => (await api.post<MaterialInsightStatus>('/creator-ai/insights', { noteId })).data,
   getInsightStatus: async (noteId: string) => (await api.get<MaterialInsightStatus>(`/creator-ai/insights/${noteId}/status`)).data,
+  getTopicCoverage: async (topicId: string) => (await api.get<TopicCoverage>(`/topics/${topicId}/coverage`)).data,
   suggestTopicBrief: async (topicId: string) => (await api.post<TopicBriefSuggestion>('/creator-ai/topic-brief', { topicId })).data,
   generateDraft: async (topicId: string, materialIds: string[]) => (await api.post('/creator-ai/draft', { topicId, materialIds })).data,
   reviewStyle: async (workId: string) => (await api.post<{ issues: StyleIssue[] }>('/creator-ai/style-review', { workId })).data,

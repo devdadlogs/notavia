@@ -27,8 +27,8 @@ function replaceRange(content: string, start: number, end: number, replacement: 
 
 function selectedLines(content: string, selection: MarkdownSelection) {
   const { start, end } = boundedSelection(content, selection);
-  const lineStart = content.lastIndexOf('\n', start - 1) + 1;
-  const nextLineBreak = content.indexOf('\n', end);
+  const lineStart = start === 0 ? 0 : content.lastIndexOf('\n', start - 1) + 1;
+  const nextLineBreak = content.indexOf('\n', Math.max(end, lineStart));
   const lineEnd = nextLineBreak === -1 ? content.length : nextLineBreak;
   return { start, end, lineStart, lineEnd, text: content.slice(lineStart, lineEnd) };
 }
@@ -80,7 +80,8 @@ export function applyMarkdownToolbarAction(
     if (action === 'heading') {
       const level = Math.max(1, Math.min(6, options?.level || 1));
       const expression = /^(#{1,6})\s+/;
-      const allAtLevel = replacement.split('\n').filter(line => line.trim()).every(line => line.startsWith(`${'#'.repeat(level)} `));
+      const nonEmptyLines = replacement.split('\n').filter(line => line.trim());
+      const allAtLevel = nonEmptyLines.length > 0 && nonEmptyLines.every(line => line.startsWith(`${'#'.repeat(level)} `));
       replacement = replacement.split('\n').map(line => {
         if (allAtLevel) return line.replace(expression, '');
         return `${'#'.repeat(level)} ${line.replace(expression, '')}`;

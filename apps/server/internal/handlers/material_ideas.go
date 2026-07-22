@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -58,34 +59,93 @@ func ListMaterialIdeas(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list material ideas"})
 		return
 	}
-	if len(ideas) > 0 {
-		ideaIDs := make([]string, 0, len(ideas))
-		ideaIndexes := make(map[string]int, len(ideas))
-		for index, idea := range ideas {
-			ideaIDs = append(ideaIDs, idea.ID)
-			ideaIndexes[idea.ID] = index
-		}
-		var links []struct {
-			IdeaID  string
-			TopicID string
-			Title   string
-		}
-		if err := config.DB.Table("topic_ideas").
-			Select("topic_ideas.idea_id, topics.id AS topic_id, topics.title").
-			Joins("JOIN topics ON topics.id = topic_ideas.topic_id").
-			Where("topic_ideas.idea_id IN ? AND topics.user_id = ?", ideaIDs, userID).
-			Order("topics.updated_at DESC").Scan(&links).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list idea topics"})
-			return
-		}
-		for _, link := range links {
-			index, ok := ideaIndexes[link.IdeaID]
-			if ok {
-				ideas[index].TopicLinks = append(ideas[index].TopicLinks, models.MaterialIdeaTopic{TopicID: link.TopicID, Title: link.Title})
-			}
-		}
+	if err := attachMaterialIdeaTopicLinks(userID, ideas); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list idea topics"})
+		return
 	}
 	c.JSON(http.StatusOK, ideas)
+}
+
+// ListAllMaterialIdeas exposes the creator's judgments as a reusable idea library.
+// The associated source remains available through NoteID and the topic links show
+// where a judgment has already been used.
+func ListAllMaterialIdeas(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	var ideas []models.MaterialIdea
+	query := config.DB.Where("user_id = ?", userID).Order("updated_at DESC, id DESC")
+	if rawLimit := c.Query("limit"); rawLimit != "" {
+		limit, err := strconv.Atoi(rawLimit)
+		if err != nil || limit < 1 || limit > 100 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "limit must be between 1 and 100"})
+			return
+		}
+		query = query.Limit(limit)
+	}
+	if err := query.Find(&ideas).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list material ideas"})
+		return
+	}
+	if err := attachMaterialIdeaSourceTitles(userID, ideas); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list idea sources"})
+		return
+	}
+	if err := attachMaterialIdeaTopicLinks(userID, ideas); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list idea topics"})
+		return
+	}
+	c.JSON(http.StatusOK, ideas)
+}
+
+func attachMaterialIdeaSourceTitles(userID string, ideas []models.MaterialIdea) error {
+	if len(ideas) == 0 {
+		return nil
+	}
+	noteIDs := make([]string, 0, len(ideas))
+	for _, idea := range ideas {
+		noteIDs = append(noteIDs, idea.NoteID)
+	}
+	var notes []models.Note
+	if err := config.DB.Select("id", "title").Where("user_id = ? AND id IN ?", userID, noteIDs).Find(&notes).Error; err != nil {
+		return err
+	}
+	titles := make(map[string]string, len(notes))
+	for _, note := range notes {
+		titles[note.ID] = note.Title
+	}
+	for index := range ideas {
+		ideas[index].SourceTitle = titles[ideas[index].NoteID]
+	}
+	return nil
+}
+
+func attachMaterialIdeaTopicLinks(userID string, ideas []models.MaterialIdea) error {
+	if len(ideas) == 0 {
+		return nil
+	}
+	ideaIDs := make([]string, 0, len(ideas))
+	ideaIndexes := make(map[string]int, len(ideas))
+	for index, idea := range ideas {
+		ideaIDs = append(ideaIDs, idea.ID)
+		ideaIndexes[idea.ID] = index
+	}
+	var links []struct {
+		IdeaID  string
+		TopicID string
+		Title   string
+	}
+	if err := config.DB.Table("topic_ideas").
+		Select("topic_ideas.idea_id, topics.id AS topic_id, topics.title").
+		Joins("JOIN topics ON topics.id = topic_ideas.topic_id").
+		Where("topic_ideas.idea_id IN ? AND topics.user_id = ?", ideaIDs, userID).
+		Order("topics.updated_at DESC").Scan(&links).Error; err != nil {
+		return err
+	}
+	for _, link := range links {
+		if index, ok := ideaIndexes[link.IdeaID]; ok {
+			ideas[index].TopicLinks = append(ideas[index].TopicLinks, models.MaterialIdeaTopic{TopicID: link.TopicID, Title: link.Title})
+		}
+	}
+	return nil
 }
 
 func CreateMaterialIdea(c *gin.Context) {

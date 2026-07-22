@@ -233,9 +233,6 @@ export default function CreativeSeedStarter({
 
             {step === "start" && (
               <div className="creative-seed-step">
-                <div className="creative-seed-icon">
-                  <Sparkles size={24} />
-                </div>
                 <h3>最近有什么事，让你一直记得、介意或想反驳？</h3>
                 <p>不用先想标题，也不用讲完整。写下你记得的片段就够了。</p>
                 <textarea

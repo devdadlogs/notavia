@@ -4,6 +4,7 @@ import api from '../../services/api';
 import { useAuthStore } from '../../stores/authStore';
 import { X, CheckCircle2, Circle } from 'lucide-react';
 import { PRIVACY_VERSION, TERMS_VERSION } from '../legal/LegalPage';
+import { errorMessage } from '../../utils/errors';
 
 export default function Register() {
   const [name, setName] = useState('');
@@ -41,8 +42,8 @@ export default function Register() {
       await api.post('/auth/register', { name, email, password, accepted: agreed, termsVersion: TERMS_VERSION, privacyVersion: PRIVACY_VERSION });
       await checkAuth(); // Refresh auth state
       navigate('/');
-    } catch (err: any) {
-      setError(err.response?.data?.error || '注册失败，请稍后再试。');
+    } catch (error: unknown) {
+      setError(errorMessage(error, '注册失败，请稍后再试。'));
     } finally {
       setIsLoading(false);
     }

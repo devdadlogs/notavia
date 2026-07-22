@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuthStore } from '../../stores/authStore';
 import { X } from 'lucide-react';
+import { errorMessage } from '../../utils/errors';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -22,8 +23,8 @@ export default function Login() {
       await api.post('/auth/login', { email, password });
       await checkAuth(); // Refresh auth state
       navigate('/');
-    } catch (err: any) {
-      setError(err.response?.data?.error || '登录失败，请检查账号和密码。');
+    } catch (error: unknown) {
+      setError(errorMessage(error, '登录失败，请检查账号和密码。'));
     } finally {
       setIsLoading(false);
     }

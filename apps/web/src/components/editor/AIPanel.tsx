@@ -4,6 +4,7 @@ import {
   ChevronDown, Copy, Check
 } from 'lucide-react';
 import { aiService } from '../../services/ai';
+import { errorMessage } from '../../utils/errors';
 
 interface AIPanelProps {
   noteId: string;
@@ -73,8 +74,8 @@ export default function AIPanel({ noteId, editorText, onInsertText, onClose, isO
       // setResult(res) is already handled by onChunk, but just in case it wasn't streaming:
       if (!res && result) res = result; 
       setResult(res);
-    } catch (err: any) {
-      setResult(`❌ AI 处理失败: ${err.response?.data?.error || err.message}`);
+    } catch (error: unknown) {
+      setResult(`❌ AI 处理失败: ${errorMessage(error, '请检查 AI 服务后重试')}`);
     } finally {
       setIsLoading(false);
     }

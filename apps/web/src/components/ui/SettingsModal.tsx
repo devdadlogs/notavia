@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Save, Server, Cloud, ExternalLink, Trash2 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import api from '../../services/api';
+import { errorMessage } from '../../utils/errors';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -125,8 +126,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       await api.delete('/auth/me', { data: { password } });
       await logout();
       window.location.href = '/auth/register';
-    } catch (error: any) {
-      alert(error.response?.data?.error || '注销账号失败');
+    } catch (error: unknown) {
+      alert(errorMessage(error, '注销账号失败'));
     }
   };
 

@@ -1,42 +1,71 @@
-import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useEditor } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
-import Placeholder from '@tiptap/extension-placeholder';
-import TaskList from '@tiptap/extension-task-list';
-import TaskItem from '@tiptap/extension-task-item';
-import TextAlign from '@tiptap/extension-text-align';
-import { TextStyle, Color } from '@tiptap/extension-text-style';
-import Highlight from '@tiptap/extension-highlight';
-import { ResizableImage } from '../../components/editor/extensions/ResizableImage';
-import { Video } from '../../components/editor/extensions/Video';
-import { Audio } from '../../components/editor/extensions/Audio';
-import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
-import { Markdown } from 'tiptap-markdown';
-import api, { uploadFile } from '../../services/api';
-import { compressImage } from '../../utils/imageCompressor';
-import { ChevronLeft, Play, FastForward, Sparkles, Menu, Pause, Mic, Trash2 } from 'lucide-react';
-import { useUIStore } from '../../stores/uiStore';
-import AIPanel from '../../components/editor/AIPanel';
-import MaterialWorkbench from '../../components/editor/MaterialWorkbench';
-import type { Material } from '../../services/creator';
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { useEditor } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import Placeholder from "@tiptap/extension-placeholder";
+import TaskList from "@tiptap/extension-task-list";
+import TaskItem from "@tiptap/extension-task-item";
+import TextAlign from "@tiptap/extension-text-align";
+import { TextStyle, Color } from "@tiptap/extension-text-style";
+import Highlight from "@tiptap/extension-highlight";
+import { ResizableImage } from "../../components/editor/extensions/ResizableImage";
+import { Video } from "../../components/editor/extensions/Video";
+import { Audio } from "../../components/editor/extensions/Audio";
+import {
+  Table,
+  TableRow,
+  TableCell,
+  TableHeader,
+} from "@tiptap/extension-table";
+import { Markdown } from "tiptap-markdown";
+import api, { uploadFile } from "../../services/api";
+import { compressImage } from "../../utils/imageCompressor";
+import {
+  ChevronLeft,
+  Play,
+  FastForward,
+  Sparkles,
+  Menu,
+  Pause,
+  Mic,
+  Trash2,
+} from "lucide-react";
+import { useUIStore } from "../../stores/uiStore";
+import AIPanel from "../../components/editor/AIPanel";
+import MaterialWorkbench from "../../components/editor/MaterialWorkbench";
+import type { Material } from "../../services/creator";
 
 // Yjs Imports
-import * as Y from 'yjs';
-import { IndexeddbPersistence } from 'y-indexeddb';
-import { WebsocketProvider } from 'y-websocket';
-import Collaboration from '@tiptap/extension-collaboration';
+import * as Y from "yjs";
+import { IndexeddbPersistence } from "y-indexeddb";
+import { WebsocketProvider } from "y-websocket";
+import Collaboration from "@tiptap/extension-collaboration";
 
-import '../../styles/editor.css';
+import "../../styles/editor.css";
 
-type NoteTag = { id?: string; tagId?: string; name?: string; tag?: { id: string; name: string } };
-type NoteDetailData = Material & { createdAt: string; contentJson?: unknown; tags?: NoteTag[] };
+type NoteTag = {
+  id?: string;
+  tagId?: string;
+  name?: string;
+  tag?: { id: string; name: string };
+};
+type NoteDetailData = Material & {
+  createdAt: string;
+  contentJson?: unknown;
+  tags?: NoteTag[];
+};
 type AudioContextConstructor = typeof AudioContext & { new (): AudioContext };
 
 export default function NoteDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const toggleSidebar = useUIStore(state => state.toggleSidebar);
+  const toggleSidebar = useUIStore((state) => state.toggleSidebar);
   const [isSaving, setIsSaving] = useState(false);
   const [noteData, setNoteData] = useState<NoteDetailData | null>(null);
   const [isAddingTag, setIsAddingTag] = useState(false);
@@ -45,37 +74,49 @@ export default function NoteDetail() {
     try {
       const { data } = await api.post(`/notes/${id}/tags`, { name: tagName });
       // Update local state without waiting for full reload
-      setNoteData(prev => prev ? {
-        ...prev,
-        tags: [...(prev.tags || []), { tag: data, tagId: data.id }]
-      } : prev);
+      setNoteData((prev) =>
+        prev
+          ? {
+              ...prev,
+              tags: [...(prev.tags || []), { tag: data, tagId: data.id }],
+            }
+          : prev,
+      );
     } catch (err) {
-      console.error('Failed to add tag', err);
+      console.error("Failed to add tag", err);
     }
   };
 
   const removeTag = async (tagId: string) => {
     try {
       await api.delete(`/notes/${id}/tags/${tagId}`);
-      setNoteData(prev => prev ? {
-        ...prev,
-        tags: prev.tags?.filter(tag => (tag.tagId || tag.id) !== tagId) || []
-      } : prev);
+      setNoteData((prev) =>
+        prev
+          ? {
+              ...prev,
+              tags:
+                prev.tags?.filter((tag) => (tag.tagId || tag.id) !== tagId) ||
+                [],
+            }
+          : prev,
+      );
     } catch (err) {
-      console.error('Failed to remove tag', err);
+      console.error("Failed to remove tag", err);
     }
   };
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState("");
   const [showAIPanel, setShowAIPanel] = useState(false);
-  const [syncState, setSyncState] = useState<'connecting' | 'connected' | 'offline'>('connecting');
-  
+  const [syncState, setSyncState] = useState<
+    "connecting" | "connected" | "offline"
+  >("connecting");
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const titleInputRef = useRef<HTMLTextAreaElement>(null);
-  
+
   const [showSaveToast, setShowSaveToast] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -87,12 +128,16 @@ export default function NoteDetail() {
   const animationFrameRef = useRef<number | null>(null);
 
   const trashNote = async () => {
-    if (!id || !window.confirm(`确定将“${title || '无标题素材'}”移到最近删除吗？`)) return;
+    if (
+      !id ||
+      !window.confirm(`确定将“${title || "无标题素材"}”移到最近删除吗？`)
+    )
+      return;
     try {
       await api.delete(`/notes/${id}`);
-      navigate('/materials');
+      navigate("/materials");
     } catch {
-      window.alert('删除失败，请稍后重试');
+      window.alert("删除失败，请稍后重试");
     }
   };
 
@@ -101,13 +146,16 @@ export default function NoteDetail() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaRecorderRef.current = new MediaRecorder(stream);
       audioChunksRef.current = [];
-      mediaRecorderRef.current.ondataavailable = e => {
+      mediaRecorderRef.current.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
 
       // Set up AudioContext for real-time visualization
-      const AudioContextClass = window.AudioContext || (window as Window & { webkitAudioContext?: AudioContextConstructor }).webkitAudioContext;
-      if (!AudioContextClass) throw new Error('当前浏览器不支持录音');
+      const AudioContextClass =
+        window.AudioContext ||
+        (window as Window & { webkitAudioContext?: AudioContextConstructor })
+          .webkitAudioContext;
+      if (!AudioContextClass) throw new Error("当前浏览器不支持录音");
       const audioContext = new AudioContextClass();
       audioContextRef.current = audioContext;
       const analyser = audioContext.createAnalyser();
@@ -126,7 +174,7 @@ export default function NoteDetail() {
             sum += dataArray[i * step + j];
           }
           const avg = sum / step;
-          let height = Math.max(4, (avg / 255) * 16);
+          const height = Math.max(4, (avg / 255) * 16);
           newVolumes.push(height);
         }
         setAudioVolumes(newVolumes);
@@ -135,37 +183,46 @@ export default function NoteDetail() {
       updateWaveform();
 
       mediaRecorderRef.current.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        const file = new File([audioBlob], 'recording.webm', { type: 'audio/webm' });
-        
+        const audioBlob = new Blob(audioChunksRef.current, {
+          type: "audio/webm",
+        });
+        const file = new File([audioBlob], "recording.webm", {
+          type: "audio/webm",
+        });
+
         // upload using existing endpoint
         const formData = new FormData();
-        formData.append('audio', file);
+        formData.append("audio", file);
         try {
           const { data } = await api.post(`/notes/${id}/audio`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' }
+            headers: { "Content-Type": "multipart/form-data" },
           });
-          setNoteData(prev => prev ? { ...prev, audioUrl: data.audioUrl } : null);
+          setNoteData((prev) =>
+            prev ? { ...prev, audioUrl: data.audioUrl } : null,
+          );
         } catch (err) {
-          console.error('Audio upload failed', err);
+          console.error("Audio upload failed", err);
         }
       };
-      
+
       mediaRecorderRef.current.start();
       setIsRecording(true);
-    } catch (err) {
-      alert('无法访问麦克风，请检查权限');
+    } catch {
+      alert("无法访问麦克风，请检查权限");
     }
   };
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      mediaRecorderRef.current.stream
+        .getTracks()
+        .forEach((track) => track.stop());
       setIsRecording(false);
-      
+
       // Cleanup audio context
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      if (animationFrameRef.current)
+        cancelAnimationFrame(animationFrameRef.current);
       if (audioContextRef.current) audioContextRef.current.close();
       setAudioVolumes([4, 4, 4, 4, 4]);
     }
@@ -179,31 +236,36 @@ export default function NoteDetail() {
     if (!file || !id) return;
 
     const formData = new FormData();
-    formData.append('audio', file);
+    formData.append("audio", file);
 
     try {
       const { data } = await api.post(`/notes/${id}/audio`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { "Content-Type": "multipart/form-data" },
       });
-      setNoteData((prev: any) => prev ? { ...prev, audioUrl: data.audioUrl } : null);
+      setNoteData((prev) =>
+        prev ? { ...prev, audioUrl: data.audioUrl } : null,
+      );
     } catch (err) {
-      console.error('Audio upload failed', err);
+      console.error("Audio upload failed", err);
     }
   };
 
   // 1. Initialize Yjs Document
-  const ydoc = useMemo(() => new Y.Doc(), [id]);
+  const ydoc = useMemo(() => new Y.Doc(), []);
   const [yjsSynced, setYjsSynced] = useState(false);
 
   // 2. Setup Yjs Providers (IndexedDB + WebSocket)
   useEffect(() => {
     if (!id) return;
-    setYjsSynced(false);
+    queueMicrotask(() => setYjsSynced(false));
     contentLoadedRef.current = false; // Reset on note change
 
     // Offline persistence
-    const indexeddbProvider = new IndexeddbPersistence(`notavia-note-${id}`, ydoc);
-    
+    const indexeddbProvider = new IndexeddbPersistence(
+      `notavia-note-${id}`,
+      ydoc,
+    );
+
     let idbSynced = false;
     let wsSynced = false;
 
@@ -211,19 +273,21 @@ export default function NoteDetail() {
       // Only mark yjsSynced after BOTH IndexedDB and WebSocket have had a chance to sync.
       // This prevents loading from DB before WebSocket delivers existing content from other browsers.
       if (idbSynced && wsSynced) {
-        console.log('✅ Both Yjs IndexedDB + WebSocket synced for', id);
+        console.log("✅ Both Yjs IndexedDB + WebSocket synced for", id);
         setYjsSynced(true);
       }
     };
 
-    indexeddbProvider.on('synced', () => {
-      console.log('✅ Yjs IndexedDB synced for', id);
+    indexeddbProvider.on("synced", () => {
+      console.log("✅ Yjs IndexedDB synced for", id);
       idbSynced = true;
-      
+
       // If IndexedDB already has content, we don't need to wait for WebSocket to load the editor
-      const xmlFragment = ydoc.getXmlFragment('default');
+      const xmlFragment = ydoc.getXmlFragment("default");
       if (xmlFragment && xmlFragment.length > 0) {
-        console.log('⚡ IndexedDB has content, rendering instantly (skipping WebSocket wait)');
+        console.log(
+          "⚡ IndexedDB has content, rendering instantly (skipping WebSocket wait)",
+        );
         setYjsSynced(true);
       } else {
         checkAllSynced();
@@ -231,19 +295,21 @@ export default function NoteDetail() {
     });
 
     // Real-time sync via Go WebSocket hub
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const configuredApi = import.meta.env.VITE_API_URL as string | undefined;
-    const wsHost = configuredApi?.startsWith('http') ? new URL(configuredApi).host : window.location.host;
+    const wsHost = configuredApi?.startsWith("http")
+      ? new URL(configuredApi).host
+      : window.location.host;
     const wsUrl = `${wsProtocol}//${wsHost}/ws/yjs`;
     const wsProvider = new WebsocketProvider(wsUrl, id, ydoc);
 
-    wsProvider.on('status', (event: { status: string }) => {
-      setSyncState(event.status === 'connected' ? 'connected' : 'offline');
+    wsProvider.on("status", (event: { status: string }) => {
+      setSyncState(event.status === "connected" ? "connected" : "offline");
     });
 
-    wsProvider.on('sync', (synced: boolean) => {
+    wsProvider.on("sync", (synced: boolean) => {
       if (synced) {
-        console.log('✅ Yjs WebSocket synced for', id);
+        console.log("✅ Yjs WebSocket synced for", id);
         wsSynced = true;
         checkAllSynced();
       }
@@ -252,7 +318,9 @@ export default function NoteDetail() {
     // Fallback: if WebSocket fails to connect or doesn't sync within 200ms, proceed anyway
     const wsFallbackTimer = setTimeout(() => {
       if (!wsSynced) {
-        console.log('⚠️ WebSocket sync timed out (200ms), proceeding with IndexedDB/DB fallback');
+        console.log(
+          "⚠️ WebSocket sync timed out (200ms), proceeding with IndexedDB/DB fallback",
+        );
         wsSynced = true;
         checkAllSynced();
       }
@@ -265,40 +333,52 @@ export default function NoteDetail() {
     };
   }, [id, ydoc]);
 
-  const saveNote = useCallback(async (newTitle: string, contentJson: unknown, contentText: string) => {
-    setIsSaving(true);
-    try {
-      await api.put(`/notes/${id}`, {
-        title: newTitle || '无标题笔记',
-        contentJson: typeof contentJson === 'object' ? JSON.stringify(contentJson) : contentJson,
-        contentText: contentText || ''
-      });
-    } catch (error) {
-      console.error('Failed to save note', error);
-    } finally {
-      setIsSaving(false);
-    }
-  }, [id]);
+  const saveNote = useCallback(
+    async (newTitle: string, contentJson: unknown, contentText: string) => {
+      setIsSaving(true);
+      try {
+        await api.put(`/notes/${id}`, {
+          title: newTitle || "无标题笔记",
+          contentJson:
+            typeof contentJson === "object"
+              ? JSON.stringify(contentJson)
+              : contentJson,
+          contentText: contentText || "",
+        });
+      } catch (error) {
+        console.error("Failed to save note", error);
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [id],
+  );
 
-  const saveNoteContent = useCallback(async (contentJson: unknown, contentText: string) => {
-    setIsSaving(true);
-    try {
-      await api.put(`/notes/${id}`, {
-        contentJson: typeof contentJson === 'object' ? JSON.stringify(contentJson) : contentJson,
-        contentText: contentText || ''
-      });
-    } catch (error) {
-      console.error('Failed to save note content', error);
-    } finally {
-      setIsSaving(false);
-    }
-  }, [id]);
+  const saveNoteContent = useCallback(
+    async (contentJson: unknown, contentText: string) => {
+      setIsSaving(true);
+      try {
+        await api.put(`/notes/${id}`, {
+          contentJson:
+            typeof contentJson === "object"
+              ? JSON.stringify(contentJson)
+              : contentJson,
+          contentText: contentText || "",
+        });
+      } catch (error) {
+        console.error("Failed to save note content", error);
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [id],
+  );
 
   // 3. Configure Tiptap with Collaboration Extension + formatting extensions
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        undoRedo: false,  // Required for Yjs collaboration
+        undoRedo: false, // Required for Yjs collaboration
         // StarterKit already includes Link and Underline — don't register separately
       }),
       TaskList,
@@ -307,7 +387,7 @@ export default function NoteDetail() {
       Video,
       Audio,
       Markdown,
-      TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      TextAlign.configure({ types: ["heading", "paragraph"] }),
       TextStyle,
       Color,
       Highlight.configure({ multicolor: false }),
@@ -316,7 +396,7 @@ export default function NoteDetail() {
       TableCell,
       TableHeader,
       // NOTE: Underline and Link are already bundled inside StarterKit in Tiptap v3
-      Placeholder.configure({ placeholder: '在此记录你的灵感和想法...' }),
+      Placeholder.configure({ placeholder: "在此记录你的灵感和想法..." }),
       Collaboration.configure({
         document: ydoc,
       }),
@@ -325,41 +405,64 @@ export default function NoteDetail() {
       // Debounced save to traditional DB for fallback/search
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = setTimeout(() => {
-        saveNoteContent(editor.getJSON(), editor.getText({ blockSeparator: '\n' }));
+        saveNoteContent(
+          editor.getJSON(),
+          editor.getText({ blockSeparator: "\n" }),
+        );
       }, 1000); // 1-second debounce
     },
     editorProps: {
       handleDrop: (view, event, slice, moved) => {
-        if (!moved && event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0]) {
+        if (
+          !moved &&
+          event.dataTransfer &&
+          event.dataTransfer.files &&
+          event.dataTransfer.files[0]
+        ) {
           const file = event.dataTransfer.files[0];
-          if (file.type.startsWith('image/')) {
+          if (file.type.startsWith("image/")) {
             event.preventDefault();
-            
+
             // Compress and upload
-            compressImage(file, { maxWidth: 1920, maxHeight: 1080, quality: 0.8 })
+            compressImage(file, {
+              maxWidth: 1920,
+              maxHeight: 1080,
+              quality: 0.8,
+            })
               .then(uploadFile)
               .then((url) => {
                 const { schema } = view.state;
-                const coordinates = view.posAtCoords({ left: event.clientX, top: event.clientY });
+                const coordinates = view.posAtCoords({
+                  left: event.clientX,
+                  top: event.clientY,
+                });
                 const node = schema.nodes.resizableImage.create({ src: url });
                 if (coordinates) {
                   const tr = view.state.tr.insert(coordinates.pos, node);
                   view.dispatch(tr);
                 }
               })
-              .catch(err => console.error("Image upload failed:", err));
+              .catch((err) => console.error("Image upload failed:", err));
             return true;
           }
         }
         return false;
       },
-      handlePaste: (view, event, slice) => {
-        if (event.clipboardData && event.clipboardData.files && event.clipboardData.files[0]) {
+      handlePaste: (view, event) => {
+        if (
+          event.clipboardData &&
+          event.clipboardData.files &&
+          event.clipboardData.files[0]
+        ) {
           const file = event.clipboardData.files[0];
-          if (file.type.startsWith('image/')) {
+          if (file.type.startsWith("image/")) {
             event.preventDefault();
-            
-            compressImage(file, { maxWidth: 1920, maxHeight: 1080, quality: 0.8 })
+
+            compressImage(file, {
+              maxWidth: 1920,
+              maxHeight: 1080,
+              quality: 0.8,
+            })
               .then(uploadFile)
               .then((url) => {
                 const { schema } = view.state;
@@ -367,25 +470,29 @@ export default function NoteDetail() {
                 const tr = view.state.tr.replaceSelectionWith(node);
                 view.dispatch(tr);
               })
-              .catch(err => console.error("Image paste upload failed:", err));
+              .catch((err) => console.error("Image paste upload failed:", err));
             return true;
           }
         }
         return false;
-      }
-    }
+      },
+    },
   });
 
   // Handle offline/online transitions to flush offline edits to DB
   useEffect(() => {
     const handleOnline = () => {
       if (editor && !editor.isDestroyed) {
-        saveNote(title, editor.getJSON(), editor.getText({ blockSeparator: '\n' }));
+        saveNote(
+          title,
+          editor.getJSON(),
+          editor.getText({ blockSeparator: "\n" }),
+        );
       }
     };
-    
-    window.addEventListener('online', handleOnline);
-    return () => window.removeEventListener('online', handleOnline);
+
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
   }, [editor, saveNote, title]);
 
   // Load Note Metadata — only populate editor AFTER ALL Yjs providers sync
@@ -394,8 +501,8 @@ export default function NoteDetail() {
       try {
         const { data } = await api.get(`/notes/${id}`);
         setNoteData(data);
-        setTitle(data.title === 'Untitled' ? '' : data.title);
-        
+        setTitle(data.title === "Untitled" ? "" : data.title);
+
         if (!editor || editor.isDestroyed) return;
 
         // CRITICAL: Guard against double-loading content from DB.
@@ -405,14 +512,14 @@ export default function NoteDetail() {
         if (contentLoadedRef.current) return;
 
         // If Yjs document is still empty after ALL providers synced, populate from DB
-        if (editor.getText().trim() === '') {
-          const content = data.contentJson || data.contentText || '';
+        if (editor.getText().trim() === "") {
+          const content = data.contentJson || data.contentText || "";
           if (content) {
             contentLoadedRef.current = true; // Mark as loaded BEFORE setContent to prevent re-entry
             try {
               const jsonContent = JSON.parse(content);
               editor.commands.setContent(jsonContent);
-            } catch (e) {
+            } catch {
               editor.commands.setContent(content);
             }
           }
@@ -421,7 +528,7 @@ export default function NoteDetail() {
           contentLoadedRef.current = true;
         }
       } catch (error) {
-        console.error('Failed to load note', error);
+        console.error("Failed to load note", error);
       }
     };
     // Wait for BOTH editor ready AND ALL Yjs providers sync complete
@@ -431,7 +538,7 @@ export default function NoteDetail() {
   // Polling for transcript completion
   useEffect(() => {
     if (!id || !noteData?.audioUrl || noteData?.transcript) return;
-    
+
     const intervalId = setInterval(async () => {
       try {
         const { data } = await api.get(`/notes/${id}`);
@@ -450,7 +557,7 @@ export default function NoteDetail() {
   useEffect(() => {
     const input = titleInputRef.current;
     if (!input) return;
-    input.style.height = 'auto';
+    input.style.height = "auto";
     input.style.height = `${input.scrollHeight}px`;
   }, [title]);
 
@@ -461,12 +568,23 @@ export default function NoteDetail() {
   };
 
   // Insert AI-generated text into the editor
-  const handleInsertAIText = (text: string, mode: 'cursor' | 'bottom' | 'top') => {
+  const handleInsertAIText = (
+    text: string,
+    mode: "cursor" | "bottom" | "top",
+  ) => {
     if (editor) {
-      if (mode === 'bottom') {
-        editor.chain().focus().insertContentAt(editor.state.doc.content.size, '\n\n' + text).run();
-      } else if (mode === 'top') {
-        editor.chain().focus().insertContentAt(0, `> 🏷️ 标签：${text}\n\n`).run();
+      if (mode === "bottom") {
+        editor
+          .chain()
+          .focus()
+          .insertContentAt(editor.state.doc.content.size, "\n\n" + text)
+          .run();
+      } else if (mode === "top") {
+        editor
+          .chain()
+          .focus()
+          .insertContentAt(0, `> 🏷️ 标签：${text}\n\n`)
+          .run();
       } else {
         editor.chain().focus().insertContent(text).run();
       }
@@ -477,11 +595,15 @@ export default function NoteDetail() {
   // Handle Cmd+S / Ctrl+S keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
         e.preventDefault(); // Prevent browser's "Save Page" dialog
         if (editor && !editor.isDestroyed) {
-          saveNote(title, editor.getJSON(), editor.getText({ blockSeparator: '\n' }));
-          
+          saveNote(
+            title,
+            editor.getJSON(),
+            editor.getText({ blockSeparator: "\n" }),
+          );
+
           // Show toast notification
           setShowSaveToast(true);
           setTimeout(() => setShowSaveToast(false), 2000);
@@ -489,78 +611,176 @@ export default function NoteDetail() {
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [editor, saveNote, title]);
 
-  if (!editor || !noteData) return <div style={{ padding: '40px', textAlign: 'center' }}>加载中...</div>;
+  if (!editor || !noteData)
+    return (
+      <div style={{ padding: "40px", textAlign: "center" }}>加载中...</div>
+    );
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-panel)', position: 'relative' }}>
-      
+    <div
+      style={{
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        backgroundColor: "var(--bg-panel)",
+        position: "relative",
+      }}
+    >
       {/* Top Header */}
-      <header style={{ 
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', 
-        borderBottom: '1px solid var(--border-color)', position: 'sticky', top: 0, zIndex: 50, 
-        backgroundColor: 'var(--bg-panel)' 
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <button onClick={toggleSidebar} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-primary)' }}>
+      <header
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "16px 24px",
+          borderBottom: "1px solid var(--border-color)",
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
+          backgroundColor: "var(--bg-panel)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <button
+            onClick={toggleSidebar}
+            style={{
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              color: "var(--text-primary)",
+            }}
+          >
             <Menu size={24} />
           </button>
-          <button onClick={() => navigate('/')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--bg-input)' }}>
+          <button
+            onClick={() => navigate("/")}
+            style={{
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: "32px",
+              height: "32px",
+              borderRadius: "50%",
+              backgroundColor: "var(--bg-input)",
+            }}
+          >
             <ChevronLeft size={20} color="var(--text-primary)" />
           </button>
         </div>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
           <button
             type="button"
             onClick={() => void trashNote()}
             aria-label="删除素材"
             title="移到最近删除"
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', display: 'flex', padding: '8px', borderRadius: '8px' }}
+            style={{
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              color: "var(--text-tertiary)",
+              display: "flex",
+              padding: "8px",
+              borderRadius: "8px",
+            }}
           >
             <Trash2 size={18} />
           </button>
           {/* Corner Sync Indicator */}
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            padding: '4px 10px', borderRadius: '20px',
-            backgroundColor: syncState === 'offline' ? '#fee2e2' : (isSaving ? '#fef3c7' : 'var(--accent-light)'),
-            color: syncState === 'offline' ? '#dc2626' : (isSaving ? '#d97706' : '#059669'),
-            fontSize: '12px', fontWeight: 500, marginRight: '8px',
-            transition: 'all 0.3s ease'
-          }}>
-            <div style={{
-              width: '8px', height: '8px', borderRadius: '50%',
-              backgroundColor: syncState === 'offline' ? '#ef4444' : (isSaving ? '#f59e0b' : '#10b981'),
-              boxShadow: isSaving ? '0 0 8px #f59e0b' : 'none'
-            }} />
-            {syncState === 'offline' ? '🔴 离线记录中' : (isSaving ? '🟡 同步中' : '🟢 已同步')}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "4px 10px",
+              borderRadius: "20px",
+              backgroundColor:
+                syncState === "offline"
+                  ? "#fee2e2"
+                  : isSaving
+                    ? "#fef3c7"
+                    : "var(--accent-light)",
+              color:
+                syncState === "offline"
+                  ? "#dc2626"
+                  : isSaving
+                    ? "#d97706"
+                    : "#059669",
+              fontSize: "12px",
+              fontWeight: 500,
+              marginRight: "8px",
+              transition: "all 0.3s ease",
+            }}
+          >
+            <div
+              style={{
+                width: "8px",
+                height: "8px",
+                borderRadius: "50%",
+                backgroundColor:
+                  syncState === "offline"
+                    ? "#ef4444"
+                    : isSaving
+                      ? "#f59e0b"
+                      : "#10b981",
+                boxShadow: isSaving ? "0 0 8px #f59e0b" : "none",
+              }}
+            />
+            {syncState === "offline"
+              ? "🔴 离线记录中"
+              : isSaving
+                ? "🟡 同步中"
+                : "🟢 已同步"}
           </div>
         </div>
       </header>
 
       {/* Main Content Scroll Area */}
-      <main className="note-detail-main" style={{ flex: 1, overflowY: 'auto', padding: '32px 5%', display: 'flex', flexDirection: 'column' }}>
-        
+      <main
+        className="note-detail-main"
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: "32px 5%",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
         {/* Note Header Info */}
         <div className="note-header-layout">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
             {noteData?.audioUrl && (
-              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e0e7ff', color: '#4f46e5', borderRadius: '50%', width: '32px', height: '32px', flexShrink: 0 }}>
+              <span
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: "#e0e7ff",
+                  color: "#4f46e5",
+                  borderRadius: "50%",
+                  width: "32px",
+                  height: "32px",
+                  flexShrink: 0,
+                }}
+              >
                 <Mic size={18} />
               </span>
             )}
             <textarea
               ref={titleInputRef}
               rows={1}
-              className="note-title-input" 
-              placeholder="无标题笔记" 
-              value={title} 
+              className="note-title-input"
+              placeholder="无标题笔记"
+              value={title}
               onChange={handleTitleChange}
-              onKeyDown={e => {
-                if (e.key === 'Enter') {
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
                   e.preventDefault();
                   e.currentTarget.blur();
                 }
@@ -568,48 +788,103 @@ export default function NoteDetail() {
               style={{ flex: 1 }}
             />
           </div>
-          <div className="note-meta-row" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span>创建时间 {new Date(noteData.createdAt).toLocaleString('zh-CN')}</span>
-            <span style={{ color: 'var(--text-tertiary)' }}>{isSaving ? '保存中...' : '已保存'}</span>
-            
+          <div
+            className="note-meta-row"
+            style={{ display: "flex", alignItems: "center", gap: "12px" }}
+          >
+            <span>
+              创建时间 {new Date(noteData.createdAt).toLocaleString("zh-CN")}
+            </span>
+            <span style={{ color: "var(--text-tertiary)" }}>
+              {isSaving ? "保存中..." : "已保存"}
+            </span>
+
             {/* Sync State Indicator (Moved to top right header) */}
           </div>
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap', alignItems: 'center' }}>
-            {noteData?.tags?.map(t => (
-              <span key={t.tagId || t.id} className="note-tag" style={{ gap: '6px' }}>
-                {t.tag?.name || t.name || '标签'}
-                <button 
-                  onClick={(e) => { const tagId = t.tagId || t.id; if (tagId) { e.stopPropagation(); void removeTag(tagId); } }}
-                  style={{ background: 'none', border: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}
+          <div
+            style={{
+              display: "flex",
+              gap: "8px",
+              marginBottom: "24px",
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
+            {noteData?.tags?.map((t) => (
+              <span
+                key={t.tagId || t.id}
+                className="note-tag"
+                style={{ gap: "6px" }}
+              >
+                {t.tag?.name || t.name || "标签"}
+                <button
+                  onClick={(e) => {
+                    const tagId = t.tagId || t.id;
+                    if (tagId) {
+                      e.stopPropagation();
+                      void removeTag(tagId);
+                    }
+                  }}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "var(--text-tertiary)",
+                    cursor: "pointer",
+                    padding: 0,
+                    display: "flex",
+                    alignItems: "center",
+                  }}
                 >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
                 </button>
               </span>
             ))}
             {isAddingTag ? (
-              <input 
+              <input
                 autoFocus
                 type="text"
                 placeholder="输入标签..."
                 className="note-tag"
-                style={{ outline: 'none', backgroundColor: '#fff', border: '1px solid var(--border-color)', minWidth: '80px', height: '25px', padding: '0 12px' }}
+                style={{
+                  outline: "none",
+                  backgroundColor: "#fff",
+                  border: "1px solid var(--border-color)",
+                  minWidth: "80px",
+                  height: "25px",
+                  padding: "0 12px",
+                }}
                 onKeyDown={async (e) => {
-                  if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                  if (e.key === "Enter" && e.currentTarget.value.trim()) {
                     await handleAddTag(e.currentTarget.value.trim());
                     setIsAddingTag(false);
-                  } else if (e.key === 'Escape') {
+                  } else if (e.key === "Escape") {
                     setIsAddingTag(false);
                   }
                 }}
                 onBlur={(e) => {
-                  if (e.currentTarget.value.trim()) handleAddTag(e.currentTarget.value.trim());
+                  if (e.currentTarget.value.trim())
+                    handleAddTag(e.currentTarget.value.trim());
                   setIsAddingTag(false);
                 }}
               />
             ) : (
-              <button 
-                className="note-tag" 
-                style={{ background: 'transparent', border: '1px dashed var(--border-color)', cursor: 'pointer', color: 'var(--text-tertiary)' }} 
+              <button
+                className="note-tag"
+                style={{
+                  background: "transparent",
+                  border: "1px dashed var(--border-color)",
+                  cursor: "pointer",
+                  color: "var(--text-tertiary)",
+                }}
                 onClick={() => setIsAddingTag(true)}
               >
                 + 添加标签
@@ -618,90 +893,237 @@ export default function NoteDetail() {
           </div>
 
           {/* Audio Player Area */}
-          <div className={`note-audio-source ${!noteData?.audioUrl && noteData?.sourceType === 'web' ? 'note-audio-source-hidden' : ''}`} style={{ display: 'flex', alignItems: 'center', backgroundColor: 'var(--bg-input)', padding: '16px 24px', borderRadius: 'var(--radius-pill)', gap: '24px' }}>
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              style={{ display: 'none' }} 
-              accept="audio/*" 
-              onChange={handleAudioUpload} 
+          <div
+            className={`note-audio-source ${!noteData?.audioUrl && noteData?.sourceType === "web" ? "note-audio-source-hidden" : ""}`}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              backgroundColor: "var(--bg-input)",
+              padding: "16px 24px",
+              borderRadius: "var(--radius-pill)",
+              gap: "24px",
+            }}
+          >
+            <input
+              type="file"
+              ref={fileInputRef}
+              style={{ display: "none" }}
+              accept="audio/*"
+              onChange={handleAudioUpload}
             />
-            
+
             {noteData?.audioUrl ? (
               <>
-                <audio 
+                <audio
                   ref={audioRef}
                   src={`http://localhost:3001${noteData.audioUrl}`}
-                  onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
-                  onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
+                  onTimeUpdate={() =>
+                    setCurrentTime(audioRef.current?.currentTime || 0)
+                  }
+                  onLoadedMetadata={() =>
+                    setDuration(audioRef.current?.duration || 0)
+                  }
                   onEnded={() => setIsPlaying(false)}
                 />
 
-                <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                <span
+                  style={{
+                    fontSize: "12px",
+                    fontWeight: 500,
+                    color: "var(--text-secondary)",
+                  }}
+                >
                   {new Date(currentTime * 1000).toISOString().substring(11, 19)}
                 </span>
-                
-                <div style={{ flex: 1, height: '4px', backgroundColor: 'var(--border-color)', borderRadius: '2px', position: 'relative', cursor: 'pointer' }} onClick={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const x = e.clientX - rect.left;
-                  const pct = x / rect.width;
-                  if (audioRef.current) audioRef.current.currentTime = pct * duration;
-                }}>
-                  <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${(currentTime / duration) * 100 || 0}%`, backgroundColor: 'var(--primary-color)', borderRadius: '2px' }} />
-                  <div style={{ position: 'absolute', left: `${(currentTime / duration) * 100 || 0}%`, top: '50%', transform: 'translate(-50%, -50%)', width: '12px', height: '12px', backgroundColor: 'var(--primary-color)', borderRadius: '50%' }} />
+
+                <div
+                  style={{
+                    flex: 1,
+                    height: "4px",
+                    backgroundColor: "var(--border-color)",
+                    borderRadius: "2px",
+                    position: "relative",
+                    cursor: "pointer",
+                  }}
+                  onClick={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const pct = x / rect.width;
+                    if (audioRef.current)
+                      audioRef.current.currentTime = pct * duration;
+                  }}
+                >
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      top: 0,
+                      height: "100%",
+                      width: `${(currentTime / duration) * 100 || 0}%`,
+                      backgroundColor: "var(--primary-color)",
+                      borderRadius: "2px",
+                    }}
+                  />
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: `${(currentTime / duration) * 100 || 0}%`,
+                      top: "50%",
+                      transform: "translate(-50%, -50%)",
+                      width: "12px",
+                      height: "12px",
+                      backgroundColor: "var(--primary-color)",
+                      borderRadius: "50%",
+                    }}
+                  />
                 </div>
-                
-                <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-tertiary)' }}>
+
+                <span
+                  style={{
+                    fontSize: "12px",
+                    fontWeight: 500,
+                    color: "var(--text-tertiary)",
+                  }}
+                >
                   {new Date(duration * 1000).toISOString().substring(11, 19)}
                 </span>
-                
-                <div style={{ display: 'flex', gap: '24px', alignItems: 'center', marginLeft: '24px' }}>
-                  <button onClick={() => { if (audioRef.current) audioRef.current.currentTime -= 5; }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
-                    <FastForward size={18} style={{ transform: 'rotate(180deg)' }} />
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "24px",
+                    alignItems: "center",
+                    marginLeft: "24px",
+                  }}
+                >
+                  <button
+                    onClick={() => {
+                      if (audioRef.current) audioRef.current.currentTime -= 5;
+                    }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "var(--text-secondary)",
+                    }}
+                  >
+                    <FastForward
+                      size={18}
+                      style={{ transform: "rotate(180deg)" }}
+                    />
                   </button>
-                  
-                  <button onClick={() => {
-                    if (isPlaying) audioRef.current?.pause();
-                    else audioRef.current?.play();
-                    setIsPlaying(!isPlaying);
-                  }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-primary)' }}>
-                    {isPlaying ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" />}
+
+                  <button
+                    onClick={() => {
+                      if (isPlaying) audioRef.current?.pause();
+                      else audioRef.current?.play();
+                      setIsPlaying(!isPlaying);
+                    }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "var(--text-primary)",
+                    }}
+                  >
+                    {isPlaying ? (
+                      <Pause size={24} fill="currentColor" />
+                    ) : (
+                      <Play size={24} fill="currentColor" />
+                    )}
                   </button>
-                  
-                  <button onClick={() => { if (audioRef.current) audioRef.current.currentTime += 5; }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+
+                  <button
+                    onClick={() => {
+                      if (audioRef.current) audioRef.current.currentTime += 5;
+                    }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "var(--text-secondary)",
+                    }}
+                  >
                     <FastForward size={18} />
                   </button>
                 </div>
               </>
             ) : (
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '14px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div
+                style={{
+                  flex: 1,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "14px",
+                    color: "var(--text-secondary)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "12px",
+                  }}
+                >
                   {isRecording ? (
                     <>
                       <div className="audio-wave">
                         {audioVolumes.map((vol, i) => (
-                          <div 
-                            key={i} 
-                            className="audio-wave-bar" 
-                            style={{ height: `${vol}px`, animation: 'none', transition: 'height 0.05s ease' }}
+                          <div
+                            key={i}
+                            className="audio-wave-bar"
+                            style={{
+                              height: `${vol}px`,
+                              animation: "none",
+                              transition: "height 0.05s ease",
+                            }}
                           ></div>
                         ))}
                       </div>
                       正在录音，请讲话...
                     </>
-                  ) : '当前笔记暂无录音'}
+                  ) : (
+                    "当前笔记暂无录音"
+                  )}
                 </span>
-                <div style={{ display: 'flex', gap: '12px' }}>
+                <div style={{ display: "flex", gap: "12px" }}>
                   {isRecording ? (
-                    <button className="btn btn-primary" style={{ backgroundColor: 'var(--danger-color)', color: 'white', border: 'none', padding: '6px 16px', borderRadius: '16px' }} onClick={stopRecording}>
+                    <button
+                      className="btn btn-primary"
+                      style={{
+                        backgroundColor: "var(--danger-color)",
+                        color: "white",
+                        border: "none",
+                        padding: "6px 16px",
+                        borderRadius: "16px",
+                      }}
+                      onClick={stopRecording}
+                    >
                       停止录音并保存
                     </button>
                   ) : (
                     <>
-                      <button className="btn btn-outline text-xs" style={{ color: 'var(--accent-color)', borderColor: 'var(--accent-color)', borderRadius: '16px', padding: '6px 16px', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={startRecording}>
+                      <button
+                        className="btn btn-outline text-xs"
+                        style={{
+                          color: "var(--accent-color)",
+                          borderColor: "var(--accent-color)",
+                          borderRadius: "16px",
+                          padding: "6px 16px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
+                        onClick={startRecording}
+                      >
                         <Mic size={14} /> 开始录音
                       </button>
-                      <button className="btn btn-outline text-xs" style={{ borderRadius: '16px', padding: '6px 16px' }} onClick={() => fileInputRef.current?.click()}>
+                      <button
+                        className="btn btn-outline text-xs"
+                        style={{ borderRadius: "16px", padding: "6px 16px" }}
+                        onClick={() => fileInputRef.current?.click()}
+                      >
                         上传音频文件
                       </button>
                     </>
@@ -712,48 +1134,64 @@ export default function NoteDetail() {
           </div>
         </div>
 
-        {noteData && <MaterialWorkbench
-          key={noteData.id}
-          note={noteData}
-          editor={editor}
-          title={title}
-          onNoteChange={(patch) => setNoteData(current => current ? { ...current, ...patch } : current)}
-        />}
+        {noteData && (
+          <MaterialWorkbench
+            key={noteData.id}
+            note={noteData}
+            editor={editor}
+            title={title}
+            onNoteChange={(patch) =>
+              setNoteData((current) =>
+                current ? { ...current, ...patch } : current,
+              )
+            }
+          />
+        )}
       </main>
 
       {/* AI Assistant Side Button */}
-      <button 
+      <button
         onClick={() => setShowAIPanel(true)}
         style={{
-          position: 'fixed',
-          right: '32px',
-          bottom: '40px',
-          backgroundColor: 'var(--bg-panel)',
-          color: 'var(--accent-color)',
-          border: '1px solid var(--border-color)',
-          borderRadius: '50%',
-          width: '52px',
-          height: '52px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          boxShadow: '0 8px 30px rgba(0,0,0,0.08)',
-          cursor: 'pointer',
+          position: "fixed",
+          right: "32px",
+          bottom: "40px",
+          backgroundColor: "var(--bg-panel)",
+          color: "var(--accent-color)",
+          border: "1px solid var(--border-color)",
+          borderRadius: "50%",
+          width: "52px",
+          height: "52px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
+          cursor: "pointer",
           zIndex: 40,
-          transition: 'all 0.2s ease'
+          transition: "all 0.2s ease",
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 40px rgba(0,0,0,0.12)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 8px 30px rgba(0,0,0,0.08)'; }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = "translateY(-2px)";
+          e.currentTarget.style.boxShadow = "0 12px 40px rgba(0,0,0,0.12)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = "translateY(0)";
+          e.currentTarget.style.boxShadow = "0 8px 30px rgba(0,0,0,0.08)";
+        }}
         title="唤醒 AI 助手"
       >
         <Sparkles size={24} />
       </button>
 
       {/* AI Panel Overlay + Drawer */}
-      <div className="ai-overlay" style={{ display: showAIPanel ? 'block' : 'none' }} onClick={() => setShowAIPanel(false)} />
+      <div
+        className="ai-overlay"
+        style={{ display: showAIPanel ? "block" : "none" }}
+        onClick={() => setShowAIPanel(false)}
+      />
       <AIPanel
         noteId={id!}
-        editorText={editor?.getText() || ''}
+        editorText={editor?.getText() || ""}
         onInsertText={handleInsertAIText}
         onClose={() => setShowAIPanel(false)}
         isOpen={showAIPanel}
@@ -761,16 +1199,37 @@ export default function NoteDetail() {
 
       {/* Toast Notification for manual save */}
       {showSaveToast && (
-        <div style={{
-          position: 'fixed', top: '40px', left: '50%', transform: 'translateX(-50%)',
-          backgroundColor: 'var(--bg-panel)', color: 'var(--text-primary)',
-          padding: '12px 24px', borderRadius: '30px', zIndex: 9999,
-          boxShadow: '0 10px 40px rgba(0,0,0,0.1)', border: '1px solid var(--border-color)',
-          display: 'flex', alignItems: 'center', gap: '8px',
-          animation: 'fade-in 0.3s ease-out'
-        }}>
-          <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10b981', boxShadow: '0 0 8px #10b981' }} />
-          <span style={{ fontSize: '14px', fontWeight: 500 }}>内容已成功保存</span>
+        <div
+          style={{
+            position: "fixed",
+            top: "40px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            backgroundColor: "var(--bg-panel)",
+            color: "var(--text-primary)",
+            padding: "12px 24px",
+            borderRadius: "30px",
+            zIndex: 9999,
+            boxShadow: "0 10px 40px rgba(0,0,0,0.1)",
+            border: "1px solid var(--border-color)",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            animation: "fade-in 0.3s ease-out",
+          }}
+        >
+          <div
+            style={{
+              width: "8px",
+              height: "8px",
+              borderRadius: "50%",
+              backgroundColor: "#10b981",
+              boxShadow: "0 0 8px #10b981",
+            }}
+          />
+          <span style={{ fontSize: "14px", fontWeight: 500 }}>
+            内容已成功保存
+          </span>
         </div>
       )}
     </div>

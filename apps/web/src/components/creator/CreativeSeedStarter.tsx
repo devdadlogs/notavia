@@ -62,6 +62,7 @@ export default function CreativeSeedStarter({
   const [answers, setAnswers] = useState<string[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [seed, setSeed] = useState<CreatorSeed | null>(null);
+  const [seedNoteId, setSeedNoteId] = useState<string | null>(null);
   const [busy, setBusy] = useState<
     "questions" | "seed" | "save" | "topic" | "write" | ""
   >("");
@@ -71,6 +72,11 @@ export default function CreativeSeedStarter({
     if (busy) return;
     setOpen(false);
     setStep("start");
+    setQuestions([]);
+    setAnswers([]);
+    setQuestionIndex(0);
+    setSeed(null);
+    setSeedNoteId(null);
     setMessage("");
   };
 
@@ -82,6 +88,8 @@ export default function CreativeSeedStarter({
     }
     setBusy("questions");
     setMessage("");
+    setSeed(null);
+    setSeedNoteId(null);
     try {
       const result = await creatorService.suggestSeedQuestions(initialThought);
       if (result.questions.length !== 3) throw new Error("没有得到完整追问");
@@ -116,7 +124,21 @@ export default function CreativeSeedStarter({
     }));
     setBusy("seed");
     try {
-      setSeed(await creatorService.createSeed(prompt.trim(), completedAnswers));
+      const createdSeed = await creatorService.createSeed(
+        prompt.trim(),
+        completedAnswers,
+      );
+      setSeed(createdSeed);
+      try {
+        setSeedNoteId(await createSeedMaterial(createdSeed));
+      } catch (error: unknown) {
+        setMessage(
+          errorMessage(
+            error,
+            "创作种子已整理完成，但暂时无法保存。请在这里重试，内容不会丢失。",
+          ),
+        );
+      }
       setStep("seed");
     } catch (error: unknown) {
       setMessage(
@@ -127,29 +149,36 @@ export default function CreativeSeedStarter({
     }
   };
 
-  const createSeedMaterial = async () => {
-    if (!seed) return;
+  const createSeedMaterial = async (seedToSave: CreatorSeed) => {
     const content = seedMaterialContent(
       prompt.trim(),
       questions.map((question, index) => ({
         question,
-        answer: answers[index].trim(),
+        answer: answers[index]?.trim() || "",
       })),
-      seed,
+      seedToSave,
     );
     const { data } = await api.post<{ id: string }>("/notes", {
-      title: seed.title,
+      title: `创作种子：${seedToSave.title}`,
       contentText: content,
       contentJson: toDocumentJSON(content),
     });
     return data.id;
   };
 
+  const ensureSeedMaterial = async () => {
+    if (seedNoteId) return seedNoteId;
+    if (!seed) throw new Error("创作种子不存在，请重新整理。");
+    const noteId = await createSeedMaterial(seed);
+    setSeedNoteId(noteId);
+    return noteId;
+  };
+
   const saveMaterial = async (continueWriting = false) => {
     setBusy(continueWriting ? "write" : "save");
+    setMessage("");
     try {
-      const noteId = await createSeedMaterial();
-      if (noteId) navigate(`/n/${noteId}`);
+      navigate(`/n/${await ensureSeedMaterial()}`);
     } catch (error: unknown) {
       setMessage(errorMessage(error, "创作种子保存失败，请重试。"));
     } finally {
@@ -160,9 +189,9 @@ export default function CreativeSeedStarter({
   const continueToTopic = async () => {
     if (!seed) return;
     setBusy("topic");
+    setMessage("");
     try {
-      const noteId = await createSeedMaterial();
-      if (!noteId) return;
+      const noteId = await ensureSeedMaterial();
       const topic = await creatorService.createTopic({
         title: seed.title,
         coreQuestion: seed.coreQuestion,
@@ -331,6 +360,17 @@ export default function CreativeSeedStarter({
                   label="可以继续追问的问题"
                   value={seed.coreQuestion}
                 />
+                <p
+                  className={
+                    seedNoteId
+                      ? "creative-seed-save-status is-saved"
+                      : "creative-seed-save-status"
+                  }
+                >
+                  {seedNoteId
+                    ? "创作种子已保存为素材草稿。接下来可继续形成选题，或直接进入编辑。"
+                    : "创作种子尚未保存。选择下一步时会自动保存；失败后也可以重试。"}
+                </p>
                 <div className="creative-seed-result-actions">
                   <button
                     onClick={() => void saveMaterial()}
@@ -341,7 +381,7 @@ export default function CreativeSeedStarter({
                     ) : (
                       <Lightbulb size={16} />
                     )}{" "}
-                    先存为素材
+                    打开素材草稿
                   </button>
                   <button
                     onClick={() => void continueToTopic()}

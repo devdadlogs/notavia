@@ -234,7 +234,7 @@ export default function CreativeSeedStarter({
         navigate(`/topics/${topicId}`);
       } catch (error: unknown) {
         setMessage(
-          `${errorMessage(error, "知乎草稿暂时没有生成。")} 选题和创作种子已经保留，点击“继续形成选题”可打开工作区后重试。`,
+          `${errorMessage(error, "主稿暂时没有生成。")} 选题和创作种子已经保留，点击“先整理选题”可打开工作区后重试。`,
         );
       }
     } catch (error: unknown) {
@@ -398,13 +398,18 @@ export default function CreativeSeedStarter({
                   }
                 >
                   {seedTopicId
-                    ? "选题和创作种子已保存。可以继续打开工作区，或直接生成知乎草稿。"
+                    ? "选题和创作种子已保存。可以继续打开工作区，或直接生成主稿。"
                     : seedNoteId
-                      ? "创作种子已保存为素材草稿。接下来可继续形成选题，或直接生成知乎草稿。"
+                      ? "创作种子已保存为素材草稿。接下来可继续形成选题，或直接生成主稿。"
                     : "创作种子尚未保存。选择下一步时会自动保存；失败后也可以重试。"}
+                </p>
+                <p className="creative-seed-next-question">
+                  接下来，你想怎么继续？
                 </p>
                 <div className="creative-seed-result-actions">
                   <button
+                    type="button"
+                    className="creative-seed-action-card"
                     onClick={() => void saveMaterial()}
                     disabled={Boolean(busy)}
                   >
@@ -412,10 +417,13 @@ export default function CreativeSeedStarter({
                       <Loader2 className="spin" size={16} />
                     ) : (
                       <Lightbulb size={16} />
-                    )}{" "}
-                    打开素材草稿
+                    )}
+                    <span>{busy === "save" ? "正在打开素材…" : "查看素材草稿"}</span>
+                    <small>先留存这次想法，稍后再写</small>
                   </button>
                   <button
+                    type="button"
+                    className="creative-seed-action-card"
                     onClick={() => void continueToTopic()}
                     disabled={Boolean(busy)}
                   >
@@ -423,10 +431,13 @@ export default function CreativeSeedStarter({
                       <Loader2 className="spin" size={16} />
                     ) : (
                       <ArrowRight size={16} />
-                    )}{" "}
-                    继续形成选题
+                    )}
+                    <span>{busy === "topic" ? "正在创建选题…" : "先整理选题"}</span>
+                    <small>检查问题、读者和结论，再写</small>
                   </button>
                   <button
+                    type="button"
+                    className="creative-seed-action-card is-primary"
                     onClick={() => void writeDraft()}
                     disabled={Boolean(busy)}
                   >
@@ -434,8 +445,11 @@ export default function CreativeSeedStarter({
                       <Loader2 className="spin" size={16} />
                     ) : (
                       <PenLine size={16} />
-                    )}{" "}
-                    生成知乎草稿
+                    )}
+                    <span>
+                      {busy === "write" ? "正在生成主稿…" : "生成主稿"}
+                    </span>
+                    <small>先生成可编辑主稿，后续可转其它平台</small>
                   </button>
                 </div>
               </div>

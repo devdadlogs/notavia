@@ -77,7 +77,7 @@ const statuses = [
   ["archived", "归档"],
 ];
 const platformLabel: Record<string, string> = {
-  zhihu: "知乎长文",
+  zhihu: "长文主稿",
   xiaohongshu: "小红书图文",
   short_video: "短视频口播",
 };
@@ -450,8 +450,8 @@ export default function TopicWorkspace() {
     setNotice({
       kind: "working",
       text: isRegeneration
-        ? "正在按最新选题重新组织一篇知乎草稿。原草稿会保留，请保持页面打开。"
-        : "正在阅读素材、组织观点并生成知乎草稿。这一步可能需要几十秒，请保持页面打开。",
+        ? "正在按最新选题重新组织一篇主稿。原草稿会保留，请保持页面打开。"
+        : "正在阅读素材、组织观点并生成主稿。这一步可能需要几十秒，请保持页面打开。",
     });
     try {
       const r = await creatorService.generateDraft(topic.id, [...selected]);
@@ -1654,7 +1654,7 @@ export default function TopicWorkspace() {
               disabled={selected.size === 0}
             >
               {topicDirty ? <Save size={15} /> : <PenIcon />}
-              {topicDirty ? "先保存选题，再生成草稿" : "按以上内容生成知乎草稿"}
+              {topicDirty ? "先保存选题，再生成草稿" : "按以上内容生成主稿"}
             </button>
             {topicDirty && (
               <small className="topic-draft-warning">

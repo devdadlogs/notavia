@@ -63,6 +63,7 @@ export default function CreativeSeedStarter({
   const [questionIndex, setQuestionIndex] = useState(0);
   const [seed, setSeed] = useState<CreatorSeed | null>(null);
   const [seedNoteId, setSeedNoteId] = useState<string | null>(null);
+  const [seedTopicId, setSeedTopicId] = useState<string | null>(null);
   const [busy, setBusy] = useState<
     "questions" | "seed" | "save" | "topic" | "write" | ""
   >("");
@@ -77,6 +78,7 @@ export default function CreativeSeedStarter({
     setQuestionIndex(0);
     setSeed(null);
     setSeedNoteId(null);
+    setSeedTopicId(null);
     setMessage("");
   };
 
@@ -90,6 +92,7 @@ export default function CreativeSeedStarter({
     setMessage("");
     setSeed(null);
     setSeedNoteId(null);
+    setSeedTopicId(null);
     try {
       const result = await creatorService.suggestSeedQuestions(initialThought);
       if (result.questions.length !== 3) throw new Error("没有得到完整追问");
@@ -174,8 +177,8 @@ export default function CreativeSeedStarter({
     return noteId;
   };
 
-  const saveMaterial = async (continueWriting = false) => {
-    setBusy(continueWriting ? "write" : "save");
+  const saveMaterial = async () => {
+    setBusy("save");
     setMessage("");
     try {
       navigate(`/n/${await ensureSeedMaterial()}`);
@@ -186,29 +189,56 @@ export default function CreativeSeedStarter({
     }
   };
 
+  const ensureSeedTopic = async (status: "preparing" | "writing") => {
+    const noteId = await ensureSeedMaterial();
+    if (seedTopicId) return { topicId: seedTopicId, noteId };
+    if (!seed) throw new Error("创作种子不存在，请重新整理。");
+    const topic = await creatorService.createTopic({
+      title: seed.title,
+      coreQuestion: seed.coreQuestion,
+      targetAudience: seed.targetAudience,
+      conclusion: seed.conclusion,
+      desiredAction: seed.desiredAction,
+      status,
+    });
+    setSeedTopicId(topic.id);
+    await creatorService.addMaterial(topic.id, noteId);
+    const idea = await creatorService.createIdea(noteId, {
+      content: seed.viewpoint,
+      sourceExcerpt: seed.experience,
+    });
+    await creatorService.addIdea(topic.id, idea.id);
+    return { topicId: topic.id, noteId };
+  };
+
   const continueToTopic = async () => {
-    if (!seed) return;
     setBusy("topic");
     setMessage("");
     try {
-      const noteId = await ensureSeedMaterial();
-      const topic = await creatorService.createTopic({
-        title: seed.title,
-        coreQuestion: seed.coreQuestion,
-        targetAudience: seed.targetAudience,
-        conclusion: seed.conclusion,
-        desiredAction: seed.desiredAction,
-        status: "preparing",
-      });
-      await creatorService.addMaterial(topic.id, noteId);
-      const idea = await creatorService.createIdea(noteId, {
-        content: seed.viewpoint,
-        sourceExcerpt: seed.experience,
-      });
-      await creatorService.addIdea(topic.id, idea.id);
-      navigate(`/topics/${topic.id}`);
+      const { topicId } = await ensureSeedTopic("preparing");
+      navigate(`/topics/${topicId}`);
     } catch (error: unknown) {
       setMessage(errorMessage(error, "选题创建失败，请重试。"));
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const writeDraft = async () => {
+    setBusy("write");
+    setMessage("");
+    try {
+      const { topicId, noteId } = await ensureSeedTopic("writing");
+      try {
+        await creatorService.generateDraft(topicId, [noteId]);
+        navigate(`/topics/${topicId}`);
+      } catch (error: unknown) {
+        setMessage(
+          `${errorMessage(error, "知乎草稿暂时没有生成。")} 选题和创作种子已经保留，点击“继续形成选题”可打开工作区后重试。`,
+        );
+      }
+    } catch (error: unknown) {
+      setMessage(errorMessage(error, "写作准备失败，请重试。"));
     } finally {
       setBusy("");
     }
@@ -367,8 +397,10 @@ export default function CreativeSeedStarter({
                       : "creative-seed-save-status"
                   }
                 >
-                  {seedNoteId
-                    ? "创作种子已保存为素材草稿。接下来可继续形成选题，或直接进入编辑。"
+                  {seedTopicId
+                    ? "选题和创作种子已保存。可以继续打开工作区，或直接生成知乎草稿。"
+                    : seedNoteId
+                      ? "创作种子已保存为素材草稿。接下来可继续形成选题，或直接生成知乎草稿。"
                     : "创作种子尚未保存。选择下一步时会自动保存；失败后也可以重试。"}
                 </p>
                 <div className="creative-seed-result-actions">
@@ -395,7 +427,7 @@ export default function CreativeSeedStarter({
                     继续形成选题
                   </button>
                   <button
-                    onClick={() => void saveMaterial(true)}
+                    onClick={() => void writeDraft()}
                     disabled={Boolean(busy)}
                   >
                     {busy === "write" ? (
@@ -403,7 +435,7 @@ export default function CreativeSeedStarter({
                     ) : (
                       <PenLine size={16} />
                     )}{" "}
-                    直接写一段
+                    生成知乎草稿
                   </button>
                 </div>
               </div>
